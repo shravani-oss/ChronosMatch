@@ -11,3 +11,7 @@ venv/
 .DS_Store
 .idea/
 .vscode/
+
+# Local assistant instructions (not part of the project)
+CLAUDE.md
+.claude/
