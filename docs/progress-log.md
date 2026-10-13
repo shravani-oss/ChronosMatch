@@ -14,3 +14,8 @@
   52 against a best ask of 51 trades immediately, market sells risk low prices).
 - Taught part B of exchange basics: order book, price-time priority, partial fills.
 - Added toy matching script and updated glossary and notes.
+
+## 2026-10-13
+- Set up environment: venv, pinned requirements.txt (pytest), Xcode CLT confirmed.
+- Added src/chronosmatch package skeleton and central config.
+- Added pytest configuration and smoke tests (3 passing); README now has setup steps and layout.
