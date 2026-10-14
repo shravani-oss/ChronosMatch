@@ -19,3 +19,8 @@
 - Set up environment: venv, pinned requirements.txt (pytest), Xcode CLT confirmed.
 - Added src/chronosmatch package skeleton and central config.
 - Added pytest configuration and smoke tests (3 passing); README now has setup steps and layout.
+
+## 2026-10-14
+- Added viva and interview prep Q&A for the big picture and exchange basics, with a draft
+  2-minute project explanation.
+- Started the design decisions log with the seven decisions made so far and the open ones.
