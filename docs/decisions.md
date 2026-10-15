@@ -31,6 +31,16 @@ Each entry: decision, alternatives, reason.
 - Alternatives: mixing them with package code.
 - Reason: keeps the engine code clean while the learning trail stays visible.
 
+## D8: Order prices are integer ticks, not floats
+- Alternatives: `float` prices; `decimal.Decimal`.
+- Reason: floats round (0.1 + 0.2 != 0.3) which breaks equality at a price level; integers are
+  exact and map directly to a C integer in the Cython engine later.
+
+## D9: Keep a slow pure-Python reference order book as a correctness oracle
+- Alternatives: test only the Cython engine against hand-written expectations.
+- Reason: one obviously-correct implementation lets us compare the fast engine against it on
+  the same random order sequences, which is the proof needed for mid review (b).
+
 ## Open decisions (to be made at design time)
 - Order record byte layout and size.
 - Ring buffer slot count and full-buffer policy (backpressure vs drop).

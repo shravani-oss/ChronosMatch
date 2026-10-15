@@ -24,3 +24,10 @@
 - Added viva and interview prep Q&A for the big picture and exchange basics, with a draft
   2-minute project explanation.
 - Started the design decisions log with the seven decisions made so far and the open ones.
+
+## 2026-10-15
+- Added Order, Side and Trade types with validation (src/chronosmatch/types.py).
+- Added a pure-Python reference order book as a correctness oracle for the future Cython
+  engine, with 10 behaviour tests (price priority, time priority, partial fills, resting
+  remainder, both sides).
+- Logged decisions D8 (integer ticks) and D9 (reference oracle).
