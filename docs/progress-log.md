@@ -31,3 +31,9 @@
   engine, with 10 behaviour tests (price priority, time priority, partial fills, resting
   remainder, both sides).
 - Logged decisions D8 (integer ticks) and D9 (reference oracle).
+
+## 2026-10-16
+- Added a seeded synthetic order generator (config defaults, input validation, 7 tests).
+- Added randomized invariant tests on the reference book: never crossed, quantity conserved,
+  trade prices within both limits, plus a guard test that trades really occur.
+- Logged decision D10.

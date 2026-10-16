@@ -41,6 +41,12 @@ Each entry: decision, alternatives, reason.
 - Reason: one obviously-correct implementation lets us compare the fast engine against it on
   the same random order sequences, which is the proof needed for mid review (b).
 
+## D10: Seeded random order generator, and invariant tests on top of it
+- Alternatives: hand-written order lists only; unseeded randomness.
+- Reason: a fixed seed makes failures reproducible and benchmarks comparable. Invariants (book
+  never crossed, quantity conserved, trade prices within both limits) catch bugs that
+  hand-picked examples miss. One guard test proves the flow really produces trades.
+
 ## Open decisions (to be made at design time)
 - Order record byte layout and size.
 - Ring buffer slot count and full-buffer policy (backpressure vs drop).

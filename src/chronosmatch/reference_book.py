@@ -44,6 +44,11 @@ class ReferenceOrderBook:
             return None
         return self.best_ask - self.best_bid
 
+    @property
+    def total_resting_quantity(self) -> int:
+        """Shares still waiting in the book, both sides combined."""
+        return sum(r.remaining for r in self._bids) + sum(r.remaining for r in self._asks)
+
     def submit(self, order: Order) -> list[Trade]:
         """Match `order` against the opposite side, rest any remainder, return trades."""
         is_buy = order.side is Side.BUY
