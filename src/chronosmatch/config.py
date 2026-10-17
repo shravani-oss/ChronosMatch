@@ -23,3 +23,14 @@ ORDER_RECORD_FORMAT: str = "<QQqIB3x"
 ORDER_RECORD_SIZE: int = 32
 SIDE_CODE_BUY: int = 0
 SIDE_CODE_SELL: int = 1
+
+# Shared-memory ring buffer (see docs/notes/04-ring-buffer.md).
+CACHE_LINE_SIZE: int = 64
+RING_MAGIC: int = 0x524D4843          # b"CHMR" read little-endian
+RING_VERSION: int = 1
+RING_DEFAULT_CAPACITY: int = 1 << 16  # slots; must be a power of two
+# Header: metadata, write index and read index each on their own cache line.
+RING_META_OFFSET: int = 0
+RING_WRITE_INDEX_OFFSET: int = CACHE_LINE_SIZE
+RING_READ_INDEX_OFFSET: int = 2 * CACHE_LINE_SIZE
+RING_HEADER_SIZE: int = 3 * CACHE_LINE_SIZE

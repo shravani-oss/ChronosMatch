@@ -34,3 +34,10 @@ Terms are added as they appear in the project.
 | **`struct`** | Python module that converts numbers to and from raw bytes using a format string. |
 | **Padding** | Unused bytes added so a record has a convenient size or alignment. |
 | **Cache line** | The 64-byte chunk the CPU moves between RAM and its cache in one go. |
+| **mmap** | Mapping a file into memory so reading/writing memory reads/writes the file; two processes mapping the same file share the same RAM. |
+| **SPSC** | Single-producer / single-consumer: exactly one writer and one reader. Allows a lock-free design. |
+| **Write index / read index** | Counters of how many items have been written / read. Their difference is how many items are waiting. |
+| **Wrap-around** | After the last slot, the ring continues at slot 0 again. |
+| **Backpressure** | When the consumer is slower, the full buffer pushes back on the producer instead of losing data. |
+| **False sharing** | Two cores writing different variables that sit on the same cache line, slowing each other down. |
+| **Memory ordering** | Whether other CPU cores see your writes in the order you made them. Not guaranteed on ARM without barriers. |

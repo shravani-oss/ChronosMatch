@@ -56,6 +56,27 @@ Each entry: decision, alternatives, reason.
   field is reserved now so the layout does not change in Week 3. u32 quantity (max ~4.29B) is
   ample for a simulator.
 
+## D12: File-backed `mmap` for shared memory
+- Alternatives: `multiprocessing.shared_memory`; pipes/queues; sockets.
+- Reason: the brief asks for mmap; a file path is all a second, unrelated process needs to
+  attach; the file can be inspected for debugging. Queues and pipes pickle, which we must avoid.
+
+## D13: SPSC ring with ever-increasing indices and power-of-two capacity
+- Alternatives: wrap indices at capacity and keep one slot empty to tell full from empty;
+  a "count" field updated by both sides.
+- Reason: ever-increasing u64 indices make full vs empty unambiguous and use every slot; each
+  index has exactly one writer, so no locks are needed. A power of two turns modulo into a
+  bit-mask.
+
+## D14: Full buffer -> `try_push` returns False (backpressure), never overwrite
+- Alternatives: overwrite the oldest unread order; block inside the buffer.
+- Reason: losing orders silently is unacceptable for a matching engine. Returning False keeps
+  the buffer simple and lets the producer choose (spin, sleep or count drops).
+
+## D15: Header with metadata, write index and read index on separate 64-byte cache lines
+- Alternatives: pack all header fields together.
+- Reason: avoids false sharing between producer and consumer cores; the magic/version check
+  catches attaching to the wrong file.
+
 ## Open decisions (to be made at design time)
-- Ring buffer slot count and full-buffer policy (backpressure vs drop).
 - Order book data structure (sorted levels vs array indexed by price tick).
