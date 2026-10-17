@@ -28,3 +28,9 @@ Terms are added as they appear in the project.
 | **Crossing the spread** | Sending a bid at or above the best ask (or an ask at or below the best bid) so a trade happens immediately. |
 | **Price improvement** | Trading at the resting order's price, which is better than the limit the incoming order allowed. |
 | **Liquidity** | How easily you can trade without moving the price; a small spread usually means high liquidity. |
+| **Byte** | 8 bits; the smallest addressable unit of memory. |
+| **Fixed-size record** | Every item uses the same number of bytes, so item N starts at N x size. |
+| **Endianness** | The order bytes of a multi-byte number are stored in. Little-endian = least significant byte first. |
+| **`struct`** | Python module that converts numbers to and from raw bytes using a format string. |
+| **Padding** | Unused bytes added so a record has a convenient size or alignment. |
+| **Cache line** | The 64-byte chunk the CPU moves between RAM and its cache in one go. |

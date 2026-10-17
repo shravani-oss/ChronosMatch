@@ -47,7 +47,15 @@ Each entry: decision, alternatives, reason.
   never crossed, quantity conserved, trade prices within both limits) catch bugs that
   hand-picked examples miss. One guard test proves the flow really produces trades.
 
+## D11: 32-byte little-endian order record with explicit padding
+- Layout: order_id u64, timestamp_ns u64, price i64, quantity u32, side u8, 3 pad bytes.
+- Alternatives: native `@` format (platform-dependent padding/size); a 24-byte record without
+  timestamp; floats for price.
+- Reason: `<` makes size and byte order identical on every machine and lets tests check exact
+  bytes. 32 is a power of two, so two records fit exactly in a 64-byte cache line. The timestamp
+  field is reserved now so the layout does not change in Week 3. u32 quantity (max ~4.29B) is
+  ample for a simulator.
+
 ## Open decisions (to be made at design time)
-- Order record byte layout and size.
 - Ring buffer slot count and full-buffer policy (backpressure vs drop).
 - Order book data structure (sorted levels vs array indexed by price tick).
