@@ -43,3 +43,23 @@
 - Fixed a mistake caught before pushing: a failing import slipped into a local commit because the
   test run's exit code was hidden by a pipe; amended before pushing.
 - Added a reproducible baseline benchmark: 12,839 orders/sec median, p50 77.4 us, p99 169.5 us.
+
+## 2026-10-18
+- Built ahead of the lessons (by choice, to match the schedule):
+  - 32-byte binary order record with struct (`order_record.py`), 8 tests.
+  - SPSC ring buffer in a memory-mapped file (`ring_buffer.py`), 13 tests: empty, full,
+    wrap-around, attach, bad file.
+  - Two-process test: 50,000 orders through a 1,024-slot ring between two OS processes.
+    20/20 repeated runs passed.
+- Logged decisions D11 to D15; added notes 03 and 04 and glossary terms.
+- Test suite: 76 passing.
+
+## Learning debt (must be taught and walked through line by line before the mid review)
+- [ ] Part B check questions (time priority, partial fill, why arrival time matters)
+- [ ] Latency, processes vs threads, the GIL
+- [ ] reference_book.py walkthrough
+- [ ] Bytes, struct, endianness -> order_record.py walkthrough
+- [ ] Serialization cost and zero-copy
+- [ ] mmap and shared memory -> ring_buffer.py walkthrough
+- [ ] Ring buffers: indices, full/empty, backpressure, SPSC, publish order, memory ordering
+- [ ] multiprocessing spawn -> ipc_demo.py and the two-process test walkthrough

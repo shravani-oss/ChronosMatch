@@ -40,7 +40,11 @@ See D12 to D15 in `docs/decisions.md`.
 - `tests/test_ring_buffer.py`: capacity validation, file size, empty, round trip with
   timestamp, FIFO, full and recover, wrap-around (150 items through 4 slots), attach from a
   second handle, reject non-ring files, header cache-line separation.
-- `tests/test_ring_buffer_two_process.py`: a real second process (see note 05 in the log).
+- `tests/test_ring_buffer_two_process.py`: a separate OS process (spawn start method) pushes
+  50,000 seeded orders through a 1,024-slot ring (about 49 wrap-arounds, constant full-buffer
+  backpressure); the parent pops them and compares every field against the expected sequence.
+  Run 20 times in a row on 2026-10-18: 20/20 passed (1,000,000 orders checked in total).
+  This is groundwork for mid-review proof (a); the dedicated 1M demo script comes later.
 
 ## Known limitation (important, say it in the viva)
 Python gives no **memory-ordering guarantee**. On Apple Silicon (ARM), the CPU may in theory
