@@ -37,3 +37,9 @@
 - Added randomized invariant tests on the reference book: never crossed, quantity conserved,
   trade prices within both limits, plus a guard test that trades really occur.
 - Logged decision D10.
+
+## 2026-10-17
+- Added levels(side) price-level snapshot to the reference book, with 5 tests.
+- Fixed a mistake caught before pushing: a failing import slipped into a local commit because the
+  test run's exit code was hidden by a pipe; amended before pushing.
+- Added a reproducible baseline benchmark: 12,839 orders/sec median, p50 77.4 us, p99 169.5 us.
