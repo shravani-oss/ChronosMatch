@@ -86,3 +86,32 @@ def test_incoming_order_does_not_trade_beyond_its_limit() -> None:
     book.submit(sell(1, 53, 10))
     assert book.submit(buy(2, 52, 10)) == []
     assert (book.best_bid, book.best_ask) == (52, 53)
+
+
+def test_levels_empty_book() -> None:
+    book = ReferenceOrderBook()
+    assert book.levels(Side.BUY) == []
+    assert book.levels(Side.SELL) == []
+
+
+def test_levels_aggregate_quantity_at_same_price() -> None:
+    book = ReferenceOrderBook()
+    book.submit(buy(1, 50, 100))
+    book.submit(buy(2, 50, 40))
+    book.submit(buy(3, 49, 10))
+    assert book.levels(Side.BUY) == [(50, 140), (49, 10)]  # best (highest) bid first
+
+
+def test_levels_asks_are_lowest_price_first() -> None:
+    book = ReferenceOrderBook()
+    book.submit(sell(1, 53, 5))
+    book.submit(sell(2, 51, 7))
+    book.submit(sell(3, 52, 9))
+    assert book.levels(Side.SELL) == [(51, 7), (52, 9), (53, 5)]
+
+
+def test_levels_reflect_partial_fills() -> None:
+    book = ReferenceOrderBook()
+    book.submit(sell(1, 51, 50))
+    book.submit(buy(2, 51, 20))
+    assert book.levels(Side.SELL) == [(51, 30)]

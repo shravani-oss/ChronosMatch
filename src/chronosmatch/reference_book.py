@@ -49,6 +49,14 @@ class ReferenceOrderBook:
         """Shares still waiting in the book, both sides combined."""
         return sum(r.remaining for r in self._bids) + sum(r.remaining for r in self._asks)
 
+    def levels(self, side: Side) -> list[tuple[int, int]]:
+        """Aggregate (price, total_quantity) per price level, best price first."""
+        resting = self._bids if side is Side.BUY else self._asks
+        totals: dict[int, int] = {}
+        for r in resting:
+            totals[r.price] = totals.get(r.price, 0) + r.remaining
+        return sorted(totals.items(), reverse=side is Side.BUY)
+
     def submit(self, order: Order) -> list[Trade]:
         """Match `order` against the opposite side, rest any remainder, return trades."""
         is_buy = order.side is Side.BUY

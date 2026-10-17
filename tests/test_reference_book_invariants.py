@@ -4,6 +4,7 @@ import pytest
 
 from chronosmatch.order_generator import generate_orders
 from chronosmatch.reference_book import ReferenceOrderBook
+from chronosmatch.types import Side
 
 SEEDS = [0, 1, 2, 42, 1234]
 ORDERS_PER_RUN = 2_000
@@ -48,3 +49,16 @@ def test_generated_flow_actually_produces_trades() -> None:
     book = ReferenceOrderBook()
     total_trades = sum(len(book.submit(o)) for o in generate_orders(ORDERS_PER_RUN, seed=0))
     assert total_trades > 100
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_levels_add_up_to_total_resting_quantity(seed: int) -> None:
+    """The level snapshot must account for every resting share, and be sorted best-first."""
+    book = ReferenceOrderBook()
+    for order in generate_orders(ORDERS_PER_RUN, seed=seed):
+        book.submit(order)
+    bids = book.levels(Side.BUY)
+    asks = book.levels(Side.SELL)
+    assert sum(q for _, q in bids) + sum(q for _, q in asks) == book.total_resting_quantity
+    assert [p for p, _ in bids] == sorted((p for p, _ in bids), reverse=True)
+    assert [p for p, _ in asks] == sorted(p for p, _ in asks)
