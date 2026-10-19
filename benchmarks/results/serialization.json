@@ -1,0 +1,28 @@
+{
+  "order_count": 200000,
+  "measured_runs": 5,
+  "methods": {
+    "struct": {
+      "round_trip_ns_per_order_median": 594.4,
+      "bytes_per_order": 32,
+      "relative_to_struct": 1.0
+    },
+    "pickle": {
+      "round_trip_ns_per_order_median": 3660.2,
+      "bytes_per_order": 116,
+      "relative_to_struct": 6.16
+    },
+    "json": {
+      "round_trip_ns_per_order_median": 2293.2,
+      "bytes_per_order": 19,
+      "relative_to_struct": 3.86
+    },
+    "struct_raw_no_order_object": {
+      "round_trip_ns_per_order_median": 227.0,
+      "bytes_per_order": 32,
+      "relative_to_struct": 0.38
+    }
+  },
+  "python": "3.14.6",
+  "machine": "macOS-15.6.1-arm64-arm-64bit-Mach-O"
+}

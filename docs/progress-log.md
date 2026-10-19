@@ -54,12 +54,20 @@
 - Logged decisions D11 to D15; added notes 03 and 04 and glossary terms.
 - Test suite: 76 passing.
 
+## 2026-10-19
+- Two-process IPC benchmark: mmap ring buffer 1.66M orders/sec vs multiprocessing.Queue
+  139k orders/sec (11.9x).
+- Serialization benchmark: struct 594 ns, JSON 2,293 ns, pickle 3,660 ns per order round trip;
+  raw struct without an Order object 227 ns (Order creation is ~62% of the cost).
+- Added note 05 and a results table to the README.
+
 ## Learning debt (must be taught and walked through line by line before the mid review)
 - [ ] Part B check questions (time priority, partial fill, why arrival time matters)
 - [ ] Latency, processes vs threads, the GIL
 - [ ] reference_book.py walkthrough
 - [ ] Bytes, struct, endianness -> order_record.py walkthrough
-- [ ] Serialization cost and zero-copy
+- [ ] Serialization cost and zero-copy (benchmarks in note 05)
+- [ ] Benchmark method: warm-up, medians, excluding setup -> bench_ipc.py walkthrough
 - [ ] mmap and shared memory -> ring_buffer.py walkthrough
 - [ ] Ring buffers: indices, full/empty, backpressure, SPSC, publish order, memory ordering
 - [ ] multiprocessing spawn -> ipc_demo.py and the two-process test walkthrough

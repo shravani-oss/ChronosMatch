@@ -25,5 +25,18 @@ docs/               notes, glossary, decisions, progress log
 learning/           small throwaway toy scripts used while learning
 ```
 
+## Results so far
+Measured on macOS 15.6.1, Apple Silicon, Python 3.14.6. Details in `docs/notes/`.
+
+| What | Result |
+|---|---|
+| Orders between two processes, mmap ring buffer | **1.66M orders/sec** |
+| Same, `multiprocessing.Queue` (pickle) | 139k orders/sec (ring is 11.9x faster) |
+| Encode + decode one order: struct / JSON / pickle | 594 ns / 2,293 ns / 3,660 ns |
+| Pure-Python reference order book (matching) | 12.8k orders/sec, p50 77 us |
+
+Reproduce: `python benchmarks/bench_ipc.py`, `python benchmarks/bench_serialization.py`,
+`python benchmarks/bench_reference_book.py`.
+
 ## Status
 Project scaffolding. Work in progress.
