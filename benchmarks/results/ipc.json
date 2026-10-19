@@ -1,0 +1,19 @@
+{
+  "order_count": 500000,
+  "seed": 0,
+  "measured_runs": 3,
+  "ring_capacity": 65536,
+  "mmap_ring_buffer": {
+    "orders_per_sec_median": 1658383,
+    "orders_per_sec_min": 1621683,
+    "orders_per_sec_max": 1689451
+  },
+  "multiprocessing_queue_pickle": {
+    "orders_per_sec_median": 139082,
+    "orders_per_sec_min": 128120,
+    "orders_per_sec_max": 144303
+  },
+  "speedup_median": 11.92,
+  "python": "3.14.6",
+  "machine": "macOS-15.6.1-arm64-arm-64bit-Mach-O"
+}
