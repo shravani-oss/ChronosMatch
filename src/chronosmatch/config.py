@@ -34,3 +34,7 @@ RING_META_OFFSET: int = 0
 RING_WRITE_INDEX_OFFSET: int = CACHE_LINE_SIZE
 RING_READ_INDEX_OFFSET: int = 2 * CACHE_LINE_SIZE
 RING_HEADER_SIZE: int = 3 * CACHE_LINE_SIZE
+
+# asyncio market firehose (see docs/notes/06-firehose.md).
+FIREHOSE_BATCH_SIZE: int = 1_000  # orders pushed between event-loop yields / rate checks
+NS_PER_SEC: int = 1_000_000_000
