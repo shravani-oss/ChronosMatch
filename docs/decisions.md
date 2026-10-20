@@ -78,5 +78,18 @@ Each entry: decision, alternatives, reason.
 - Reason: avoids false sharing between producer and consumer cores; the magic/version check
   catches attaching to the wrong file.
 
+## D16: Firehose writes straight into the ring; websocket feed deferred
+- Alternatives: a mock websocket server plus a websocket client feeding the ring now.
+- Reason: the Week 1 plan asks for an asyncio firehose into the buffer, and the mid review
+  checks IPC and matching. A websocket hop adds a dependency and network latency that would
+  blur the zero-copy measurements. It can be added later as another asyncio producer
+  (Week 4 polish) without changing the ring.
+
+## D17: Rate control by batch schedule, yielding to the event loop every batch
+- Alternatives: `await asyncio.sleep(1/rate)` per order; a token bucket; no yielding.
+- Reason: per-order sleeps are far below asyncio's ~1 ms timer precision and would cap the rate.
+  Scheduling each 1,000-order batch against `start + sent/rate` self-corrects drift (measured
+  99,979/s at a 100k target). Yielding every batch keeps other coroutines responsive.
+
 ## Open decisions (to be made at design time)
 - Order book data structure (sorted levels vs array indexed by price tick).

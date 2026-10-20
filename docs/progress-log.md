@@ -61,6 +61,14 @@
   raw struct without an Order object 227 ns (Order creation is ~62% of the cost).
 - Added note 05 and a results table to the README.
 
+## 2026-10-20
+- Built the asyncio market firehose (`firehose.py`) with a CLI, batch-scheduled rate limiting,
+  backpressure handling and per-order entry timestamps. 7 unit tests + 1 two-process CLI test.
+- Fixed a wrong test (not a code bug): the backpressure test never filled the ring because the
+  firehose yielded more often than the ring could fill; batch size raised above capacity.
+- Benchmark: 830,571 orders/sec unlimited, 99,979 orders/sec at the 100k target. Week 1 target met.
+- Decisions D16 (websocket deferred) and D17 (batch rate control). Test suite: 84 passing.
+
 ## Learning debt (must be taught and walked through line by line before the mid review)
 - [ ] Part B check questions (time priority, partial fill, why arrival time matters)
 - [ ] Latency, processes vs threads, the GIL
@@ -70,4 +78,5 @@
 - [ ] Benchmark method: warm-up, medians, excluding setup -> bench_ipc.py walkthrough
 - [ ] mmap and shared memory -> ring_buffer.py walkthrough
 - [ ] Ring buffers: indices, full/empty, backpressure, SPSC, publish order, memory ordering
+- [ ] asyncio: event loop, coroutines, sleep(0), gather -> firehose.py walkthrough
 - [ ] multiprocessing spawn -> ipc_demo.py and the two-process test walkthrough

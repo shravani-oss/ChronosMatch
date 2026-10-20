@@ -41,3 +41,8 @@ Terms are added as they appear in the project.
 | **Backpressure** | When the consumer is slower, the full buffer pushes back on the producer instead of losing data. |
 | **False sharing** | Two cores writing different variables that sit on the same cache line, slowing each other down. |
 | **Memory ordering** | Whether other CPU cores see your writes in the order you made them. Not guaranteed on ARM without barriers. |
+| **asyncio** | Python's library for running many tasks in one thread by switching between them at `await` points. |
+| **Event loop** | The asyncio scheduler that decides which waiting task runs next. |
+| **Coroutine** | An `async def` function; it can pause at `await` and resume later. |
+| **Firehose** | A very high-volume, continuous stream of messages (here, mock orders). |
+| **Rate limiting** | Deliberately slowing a sender to a target number of messages per second. |

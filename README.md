@@ -33,10 +33,12 @@ Measured on macOS 15.6.1, Apple Silicon, Python 3.14.6. Details in `docs/notes/`
 | Orders between two processes, mmap ring buffer | **1.66M orders/sec** |
 | Same, `multiprocessing.Queue` (pickle) | 139k orders/sec (ring is 11.9x faster) |
 | Encode + decode one order: struct / JSON / pickle | 594 ns / 2,293 ns / 3,660 ns |
+| asyncio firehose into the ring (separate process), unlimited | 831k orders/sec |
+| asyncio firehose at the 100k/sec target | 99,979 orders/sec |
 | Pure-Python reference order book (matching) | 12.8k orders/sec, p50 77 us |
 
 Reproduce: `python benchmarks/bench_ipc.py`, `python benchmarks/bench_serialization.py`,
-`python benchmarks/bench_reference_book.py`.
+`python benchmarks/bench_reference_book.py`, `python benchmarks/bench_firehose.py`.
 
 ## Status
 Project scaffolding. Work in progress.

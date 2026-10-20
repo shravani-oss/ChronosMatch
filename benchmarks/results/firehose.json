@@ -1,0 +1,30 @@
+{
+  "order_count": 500000,
+  "measured_runs": 3,
+  "batch_size": 1000,
+  "ring_capacity": 65536,
+  "unlimited": {
+    "requested_rate": "unlimited",
+    "orders_per_sec_median": 830571,
+    "orders_per_sec_min": 817746,
+    "orders_per_sec_max": 840948,
+    "full_waits_per_run": [
+      0,
+      0,
+      0
+    ]
+  },
+  "target_100k": {
+    "requested_rate": 100000,
+    "orders_per_sec_median": 99979,
+    "orders_per_sec_min": 99979,
+    "orders_per_sec_max": 99980,
+    "full_waits_per_run": [
+      0,
+      0,
+      0
+    ]
+  },
+  "python": "3.14.6",
+  "machine": "macOS-15.6.1-arm64-arm-64bit-Mach-O"
+}
