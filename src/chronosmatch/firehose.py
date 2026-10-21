@@ -16,6 +16,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from chronosmatch import config
+from chronosmatch.no_pickle import forbid_pickle
 from chronosmatch.order_generator import generate_orders
 from chronosmatch.ring_buffer import RingBuffer
 from chronosmatch.types import Order
@@ -72,7 +73,12 @@ def main(argv: list[str] | None = None) -> None:
         "--rate", type=int, default=config.TARGET_ORDERS_PER_SEC, help="orders/sec, 0 = unlimited"
     )
     parser.add_argument("--batch", type=int, default=config.FIREHOSE_BATCH_SIZE)
+    parser.add_argument(
+        "--forbid-pickle", action="store_true", help="make any use of pickle raise (proof mode)"
+    )
     args = parser.parse_args(argv)
+    if args.forbid_pickle:
+        forbid_pickle()
 
     with RingBuffer.attach(args.ring) as ring:
         stats = asyncio.run(
