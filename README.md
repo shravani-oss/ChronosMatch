@@ -25,6 +25,15 @@ docs/               notes, glossary, decisions, progress log
 learning/           small throwaway toy scripts used while learning
 ```
 
+## Mid-review demo: 1M orders between two processes, no pickle
+```bash
+PYTHONPATH=src python -m chronosmatch.demo_ipc                 # unlimited speed
+PYTHONPATH=src python -m chronosmatch.demo_ipc --rate 100000   # at the 100k/sec target
+```
+The firehose runs as a separate process, pickle is disabled in both processes, and every one of
+the 1,000,000 orders is checked on arrival. Latest run: 1,000,000 received, 0 mismatches, PASS.
+See `docs/notes/07-mid-review-ipc-demo.md`.
+
 ## Results so far
 Measured on macOS 15.6.1, Apple Silicon, Python 3.14.6. Details in `docs/notes/`.
 

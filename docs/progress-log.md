@@ -69,6 +69,14 @@
 - Benchmark: 830,571 orders/sec unlimited, 99,979 orders/sec at the 100k target. Week 1 target met.
 - Decisions D16 (websocket deferred) and D17 (batch rate control). Test suite: 84 passing.
 
+## 2026-10-21
+- Mid-review proof (a) done: `python -m chronosmatch.demo_ipc` moves 1,000,000 orders from a
+  separate firehose process through the mmap ring with pickle disabled in both processes, and
+  checks every order. 3 unlimited runs (575k-640k orders/sec) and 1 run at 100k/sec: all PASS,
+  0 mismatches.
+- Added the pickle guard (`no_pickle.py`), a `--forbid-pickle` firehose flag, and a negative test
+  proving the demo reports FAIL on mismatched data. Test suite: 92 passing.
+
 ## Learning debt (must be taught and walked through line by line before the mid review)
 - [ ] Part B check questions (time priority, partial fill, why arrival time matters)
 - [ ] Latency, processes vs threads, the GIL
@@ -79,4 +87,5 @@
 - [ ] mmap and shared memory -> ring_buffer.py walkthrough
 - [ ] Ring buffers: indices, full/empty, backpressure, SPSC, publish order, memory ordering
 - [ ] asyncio: event loop, coroutines, sleep(0), gather -> firehose.py walkthrough
+- [ ] Rehearse the demo_ipc.py demo and its evidence table (note 07)
 - [ ] multiprocessing spawn -> ipc_demo.py and the two-process test walkthrough
