@@ -57,3 +57,24 @@ append at the tail (new order), consume from the head (oldest first) -> time pri
 - 22 Oct: toolchain, this design, book structure (resting orders, best prices, levels, FIFO).
 - 24-25 Oct: matching (`submit`), then differential tests against the reference book on
   random order streams = mid-review proof (b), and a benchmark against the baseline.
+
+## Implementation status (22 Oct)
+`cython_book.pyx` compiles cleanly (Cython 3.3.0, Apple clang 17, `-O3`) and implements:
+- `__cinit__`/`__dealloc__`: malloc/free of all arrays and the node pool; MemoryError on failure.
+- `_alloc_node` / `_release_node`: O(1) free-stack pool; OverflowError when full.
+- `_rest` (cdef, C integers only): link a node at the tail of its level, update level quantity,
+  best price and totals.
+- Python API: `rest(order)` (non-crossing only; rejects out-of-range prices and crossing
+  orders), `best_bid`, `best_ask`, `spread`, `levels(side)`, `queue_order_ids(side, price)`,
+  `total_resting_quantity`, `resting_order_count`, `free_nodes`.
+
+Tests (`tests/test_cython_book_structure.py`, 13): empty book, invalid construction, config
+defaults, best prices and spread, level aggregation, FIFO order at a price, out-of-range prices,
+crossing orders rejected, pool full, and **identical levels/best prices/quantity to the reference
+book** on 3,000 random non-crossing orders.
+
+Gotcha: a test tried to build `Order(price=0)` to check the book's range check, but `Order`
+already rejects it at construction. Prices below 1 can never reach the book.
+
+Not yet: matching (`submit`), releasing nodes when orders fill, re-scanning the best price when a
+level empties. Those come with the matching logic.

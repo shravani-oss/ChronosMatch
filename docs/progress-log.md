@@ -77,6 +77,15 @@
 - Added the pickle guard (`no_pickle.py`), a `--forbid-pickle` firehose flag, and a negative test
   proving the demo reports FAIL on mismatched data. Test suite: 92 passing.
 
+## 2026-10-22
+- Week 2 started. Installed and pinned Cython 3.3.0 + setuptools; `setup.py build_ext --inplace`
+  build; README build step.
+- Wrote the Cython order book design before coding (note 08; decisions D18-D20): per-price C
+  arrays, preallocated node pool with a free stack, linked FIFO per level.
+- Implemented `cython_book.pyx`: book structure and resting orders in C memory. 13 tests,
+  including an exact comparison with the reference book on random non-crossing orders.
+- Test suite: 105 passing.
+
 ## Learning debt (must be taught and walked through line by line before the mid review)
 - [ ] Part B check questions (time priority, partial fill, why arrival time matters)
 - [ ] Latency, processes vs threads, the GIL
@@ -88,4 +97,6 @@
 - [ ] Ring buffers: indices, full/empty, backpressure, SPSC, publish order, memory ordering
 - [ ] asyncio: event loop, coroutines, sleep(0), gather -> firehose.py walkthrough
 - [ ] Rehearse the demo_ipc.py demo and its evidence table (note 07)
+- [ ] Cython: .pyx, cdef, cdef class, malloc/free, compiling -> cython_book.pyx walkthrough
+- [ ] Order book data structures: arrays by price tick, node pool, linked FIFO (note 08)
 - [ ] multiprocessing spawn -> ipc_demo.py and the two-process test walkthrough
