@@ -14,6 +14,7 @@ xcode-select --install          # C compiler, needed for Cython later
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+python setup.py build_ext --inplace   # compile the Cython modules
 pytest                          # run the tests
 ```
 

@@ -38,3 +38,7 @@ RING_HEADER_SIZE: int = 3 * CACHE_LINE_SIZE
 # asyncio market firehose (see docs/notes/06-firehose.md).
 FIREHOSE_BATCH_SIZE: int = 1_000  # orders pushed between event-loop yields / rate checks
 NS_PER_SEC: int = 1_000_000_000
+
+# Cython order book (see docs/notes/08-cython-order-book-design.md).
+BOOK_MAX_PRICE_TICKS: int = 10_000        # valid prices are 1..BOOK_MAX_PRICE_TICKS
+BOOK_MAX_RESTING_ORDERS: int = 1 << 20    # size of the preallocated order-node pool

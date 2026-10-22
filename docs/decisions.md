@@ -91,5 +91,20 @@ Each entry: decision, alternatives, reason.
   Scheduling each 1,000-order batch against `start + sent/rate` self-corrects drift (measured
   99,979/s at a 100k target). Yielding every batch keeps other coroutines responsive.
 
+## D18: Order book indexed by price tick (arrays), not a sorted structure
+- Alternatives: sorted list of levels; balanced tree/heap; dict of price -> deque.
+- Reason: O(1) access to any level and to the best price; contiguous C arrays are
+  cache-friendly. Cost: a bounded price range (1..BOOK_MAX_PRICE_TICKS) and fixed memory.
+
+## D19: Preallocated node pool + free stack; each level is a linked FIFO through the pool
+- Alternatives: malloc/free per order; Python deque per level.
+- Reason: no allocation and no Python objects while matching (Week 3 goal); FIFO by linking at
+  the tail and consuming from the head gives time priority in O(1).
+
+## D20: Build with `python setup.py build_ext --inplace`
+- Alternatives: `pip install -e .`; pyximport at import time.
+- Reason: simplest explicit compile step with visible compiler output; the compiled .so lands
+  next to the Python modules in src/chronosmatch so tests import it unchanged. Generated .c/.so
+  files are git-ignored.
+
 ## Open decisions (to be made at design time)
-- Order book data structure (sorted levels vs array indexed by price tick).

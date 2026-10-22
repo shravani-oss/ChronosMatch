@@ -46,3 +46,9 @@ Terms are added as they appear in the project.
 | **Coroutine** | An `async def` function; it can pause at `await` and resume later. |
 | **Firehose** | A very high-volume, continuous stream of messages (here, mock orders). |
 | **Rate limiting** | Deliberately slowing a sender to a target number of messages per second. |
+| **Cython** | A language close to Python that compiles to C, allowing C types and structs for speed. |
+| **`.pyx`** | A Cython source file; compiled into a C extension module (`.so`). |
+| **`cdef`** | Cython keyword declaring C-level variables, functions or classes (no Python object overhead). |
+| **Price tick** | The smallest price step; prices are stored as whole numbers of ticks. |
+| **Node pool / free list** | A preallocated array of slots plus a stack of free slot indices, so no memory is allocated while running. |
+| **Linked list** | Items that each store the index of the next item; here, the FIFO queue at one price level. |
