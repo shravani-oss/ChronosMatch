@@ -86,6 +86,13 @@
   including an exact comparison with the reference book on random non-crossing orders.
 - Test suite: 105 passing.
 
+## 2026-10-23
+- Implemented matching in the Cython book: cdef `_match` core (price-time priority, partial
+  fills, node recycling, best-price rescans), `submit` and `submit_raw` entry points.
+- 10 matching scenarios now run against both books (20 tests); 11 Cython edge-case tests.
+- Sanity differential check: 100,000 random orders over 5 seeds, identical trades and books.
+- Decisions D21 (up-front rejection when pool full) and D22 (C trade buffer). Suite: 136 passing.
+
 ## Learning debt (must be taught and walked through line by line before the mid review)
 - [ ] Part B check questions (time priority, partial fill, why arrival time matters)
 - [ ] Latency, processes vs threads, the GIL

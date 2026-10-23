@@ -52,3 +52,5 @@ Terms are added as they appear in the project.
 | **Price tick** | The smallest price step; prices are stored as whole numbers of ticks. |
 | **Node pool / free list** | A preallocated array of slots plus a stack of free slot indices, so no memory is allocated while running. |
 | **Linked list** | Items that each store the index of the next item; here, the FIFO queue at one price level. |
+| **Sweep** | An incoming order that consumes several price levels in one go. |
+| **Sentinel value** | A special "impossible" value meaning "none", e.g. best bid 0 = no bids. |

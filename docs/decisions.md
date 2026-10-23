@@ -107,4 +107,17 @@ Each entry: decision, alternatives, reason.
   next to the Python modules in src/chronosmatch so tests import it unchanged. Generated .c/.so
   files are git-ignored.
 
+## D21: Reject a new order up front when the node pool is full
+- Alternatives: match first, then fail if the remainder cannot rest; grow the pool.
+- Reason: matching only frees nodes, so one free node before matching guarantees the remainder
+  can rest. Checking first means an order is either fully applied or not applied at all; failing
+  halfway would leave trades applied but unreported. Growing the pool would mean reallocating
+  in the hot path. Cost: while the pool is full, even an order that would fully fill is rejected.
+
+## D22: Trades written to a preallocated C buffer; two APIs over one core
+- Alternatives: append Python Trade objects inside the matching loop.
+- Reason: keeps the matching loop free of Python objects. `submit` converts to Trade objects
+  afterwards for tests and normal use; `submit_raw` skips objects entirely. The buffer holds
+  `capacity` records, the most trades one order can produce (one per resting order).
+
 ## Open decisions (to be made at design time)

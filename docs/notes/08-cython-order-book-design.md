@@ -78,3 +78,28 @@ already rejects it at construction. Prices below 1 can never reach the book.
 
 Not yet: matching (`submit`), releasing nodes when orders fill, re-scanning the best price when a
 level empties. Those come with the matching logic.
+
+## Implementation status (23 Oct): matching
+`_match` (cdef, C integers only) implements price-time priority:
+1. Look at the best opposite price; stop if it no longer crosses (or the side is empty: the
+   sentinels 0 / max_price + 1 can never cross a valid price, so no extra check is needed).
+2. Consume that level's FIFO from the head: fill `min(remaining, resting)`, write a C trade
+   record at the **resting** price, reduce level quantity and totals.
+3. Fully filled resting order: unlink it and push its node back on the free stack.
+4. Level empty: scan outward to the next non-empty price and store it as the new best.
+5. Leftover quantity rests via `_rest`.
+
+Two entry points share the core:
+- `submit(order) -> list[Trade]`: Python objects in and out (same API as the reference book).
+- `submit_raw(is_buy, order_id, price, quantity) -> int`: C integers in, trade count out; no
+  Order/Trade objects (for benchmarks and the Week 3 hot path).
+
+Tests:
+- `tests/test_matching_behaviour.py`: 10 matching scenarios run on **both** books (20 tests).
+- `tests/test_cython_book_edge_cases.py` (11): node recycling (2,000 orders through a 4-node
+  pool), best-price rescans across wide gaps, side emptying, partially filled order keeps queue
+  position, full pool rejects without changing the book, boundary prices 1 and max,
+  submit_raw = submit, submit_raw input validation.
+- Sanity check run on 23 Oct (not yet a committed test): 5 seeds x 20,000 random orders,
+  Cython and reference produced identical trades (~16,100 per seed) and identical final books.
+  The committed differential test is next.
