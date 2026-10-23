@@ -4,14 +4,15 @@
 Storage is plain C memory: per-price arrays for each side, and a preallocated pool of order
 nodes linked into one FIFO queue per price level. The cdef core methods work only on C integers.
 
-Status (22 Oct): book structure and resting orders. Matching (`submit`) comes next.
+Matching: `submit` (Python objects in/out) and `submit_raw` (C integers only) share the cdef
+`_match` core, which writes trades into a preallocated C trade buffer.
 """
 
 from libc.stdint cimport int32_t, int64_t
 from libc.stdlib cimport free, malloc
 
 from chronosmatch import config
-from chronosmatch.types import Side
+from chronosmatch.types import Side, Trade
 
 cdef int32_t NO_NODE = -1
 
@@ -21,6 +22,13 @@ cdef struct Node:
     int64_t price
     int64_t remaining
     int32_t next          # next node in the same price level (FIFO), or NO_NODE
+
+
+cdef struct TradeRec:
+    int64_t buy_order_id
+    int64_t sell_order_id
+    int64_t price
+    int64_t quantity
 
 
 cdef class CythonOrderBook:
@@ -43,6 +51,8 @@ cdef class CythonOrderBook:
     cdef int64_t resting_qty
     cdef int32_t resting_orders
 
+    cdef TradeRec* trades         # one incoming order makes at most `capacity` trades
+
     def __cinit__(self, max_price=None, capacity=None):
         cdef int64_t i
         cdef int64_t levels
@@ -60,7 +70,8 @@ cdef class CythonOrderBook:
         self.ask_head = <int32_t*> malloc(levels * sizeof(int32_t))
         self.ask_tail = <int32_t*> malloc(levels * sizeof(int32_t))
         self.ask_qty = <int64_t*> malloc(levels * sizeof(int64_t))
-        if (self.nodes == NULL or self.free_stack == NULL or self.bid_head == NULL
+        self.trades = <TradeRec*> malloc(self.capacity * sizeof(TradeRec))
+        if (self.trades == NULL or self.nodes == NULL or self.free_stack == NULL or self.bid_head == NULL
                 or self.bid_tail == NULL or self.bid_qty == NULL or self.ask_head == NULL
                 or self.ask_tail == NULL or self.ask_qty == NULL):
             raise MemoryError("could not allocate order book memory")
@@ -91,6 +102,7 @@ cdef class CythonOrderBook:
         free(self.ask_head)
         free(self.ask_tail)
         free(self.ask_qty)
+        free(self.trades)
 
     # ---------------------------------------------------------------- C core
 
@@ -131,7 +143,106 @@ cdef class CythonOrderBook:
         self.resting_orders += 1
         return 0
 
+    cdef int64_t _match(self, bint is_buy, int64_t order_id, int64_t price, int64_t qty) except -1:
+        """Match against the opposite side, rest any remainder; return the number of trades.
+
+        Price priority: always take the current best opposite level.
+        Time priority: within a level, consume from the head of the FIFO (oldest first).
+        Trades execute at the resting order's price. Caller guarantees a free node exists.
+        """
+        cdef int32_t* head = self.ask_head if is_buy else self.bid_head
+        cdef int32_t* tail = self.ask_tail if is_buy else self.bid_tail
+        cdef int64_t* level_qty = self.ask_qty if is_buy else self.bid_qty
+        cdef int64_t remaining = qty
+        cdef int64_t n = 0
+        cdef int64_t level, fill
+        cdef int32_t node, next_node
+
+        while remaining > 0:
+            level = self.best_ask_px if is_buy else self.best_bid_px
+            if (is_buy and level > price) or (not is_buy and level < price):
+                break  # best opposite price no longer crosses (or that side is empty)
+
+            node = head[level]
+            while node != NO_NODE and remaining > 0:
+                fill = remaining if remaining < self.nodes[node].remaining else self.nodes[node].remaining
+                if is_buy:
+                    self.trades[n].buy_order_id = order_id
+                    self.trades[n].sell_order_id = self.nodes[node].order_id
+                else:
+                    self.trades[n].buy_order_id = self.nodes[node].order_id
+                    self.trades[n].sell_order_id = order_id
+                self.trades[n].price = level
+                self.trades[n].quantity = fill
+                n += 1
+
+                self.nodes[node].remaining -= fill
+                remaining -= fill
+                level_qty[level] -= fill
+                self.resting_qty -= fill
+
+                if self.nodes[node].remaining == 0:  # fully filled: unlink and recycle
+                    next_node = self.nodes[node].next
+                    self._release_node(node)
+                    self.resting_orders -= 1
+                    node = next_node
+                    head[level] = node
+                    if node == NO_NODE:
+                        tail[level] = NO_NODE
+
+            if head[level] == NO_NODE:  # level emptied: scan to the next non-empty one
+                if is_buy:
+                    level += 1
+                    while level <= self.max_price and head[level] == NO_NODE:
+                        level += 1
+                    self.best_ask_px = level          # max_price + 1 if none left
+                else:
+                    level -= 1
+                    while level >= 1 and head[level] == NO_NODE:
+                        level -= 1
+                    self.best_bid_px = level          # 0 if none left
+
+        if remaining > 0:
+            self._rest(is_buy, order_id, price, remaining)
+        return n
+
     # ------------------------------------------------------- Python-facing API
+
+    cdef int _check_new_order(self, int64_t price) except -1:
+        if price < 1 or price > self.max_price:
+            raise ValueError(f"price {price} outside 1..{self.max_price}")
+        if self.free_top == 0:
+            # Reject up front: matching only frees nodes, so one free node now guarantees
+            # the remainder can rest afterwards, and no half-applied order is possible.
+            raise OverflowError("order book node pool is full; order rejected")
+        return 0
+
+    def submit(self, order):
+        """Match a limit order, rest any remainder, and return the trades as Trade objects."""
+        self._check_new_order(order.price)
+        cdef int64_t n = self._match(
+            order.side is Side.BUY, order.order_id, order.price, order.quantity
+        )
+        cdef int64_t i
+        return [
+            Trade(
+                self.trades[i].buy_order_id,
+                self.trades[i].sell_order_id,
+                self.trades[i].price,
+                self.trades[i].quantity,
+            )
+            for i in range(n)
+        ]
+
+    def submit_raw(self, bint is_buy, int64_t order_id, int64_t price, int64_t quantity):
+        """Same as submit, but takes C integers and returns only the trade count.
+
+        No Order or Trade objects are created; used for benchmarks and the Week 3 hot path.
+        """
+        if quantity <= 0:
+            raise ValueError(f"quantity must be positive, got {quantity}")
+        self._check_new_order(price)
+        return self._match(is_buy, order_id, price, quantity)
 
     def rest(self, order):
         """Add a non-crossing limit order to the book without matching.
