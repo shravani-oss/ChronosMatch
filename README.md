@@ -35,6 +35,10 @@ The firehose runs as a separate process, pickle is disabled in both processes, a
 the 1,000,000 orders is checked on arrival. Latest run: 1,000,000 received, 0 mismatches, PASS.
 See `docs/notes/07-mid-review-ipc-demo.md`.
 
+## Mid-review proof (b): matching is correct
+`pytest tests/test_differential.py -v` checks the Cython book against a simple reference book
+on 108,000 random orders across 6 kinds of order flow: identical trades after every order.
+
 ## Results so far
 Measured on macOS 15.6.1, Apple Silicon, Python 3.14.6. Details in `docs/notes/`.
 
@@ -46,9 +50,14 @@ Measured on macOS 15.6.1, Apple Silicon, Python 3.14.6. Details in `docs/notes/`
 | asyncio firehose into the ring (separate process), unlimited | 831k orders/sec |
 | asyncio firehose at the 100k/sec target | 99,979 orders/sec |
 | Pure-Python reference order book (matching) | 12.8k orders/sec, p50 77 us |
+| Cython order book, `submit` (Python objects) | 2.7M orders/sec, p50 0.17 us |
+| Cython order book, `submit_raw` (integers only) | 15.9M orders/sec, p50 0.13 us |
 
 Reproduce: `python benchmarks/bench_ipc.py`, `python benchmarks/bench_serialization.py`,
-`python benchmarks/bench_reference_book.py`, `python benchmarks/bench_firehose.py`.
+`python benchmarks/bench_reference_book.py`, `python benchmarks/bench_firehose.py`, `python benchmarks/bench_order_books.py`.
+
+The Cython speedup is measured against our deliberately simple reference book, not against an
+optimised pure-Python book; see `docs/notes/09-order-book-benchmarks.md`.
 
 ## Status
 Project scaffolding. Work in progress.

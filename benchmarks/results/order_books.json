@@ -1,0 +1,62 @@
+{
+  "seed": 0,
+  "warmup_runs": 1,
+  "measured_runs": 5,
+  "throughput_20000_orders": {
+    "reference": {
+      "orders_per_sec_median": 12747,
+      "orders_per_sec_min": 12700,
+      "orders_per_sec_max": 12767,
+      "trades_per_run": 16093,
+      "speedup_vs_reference": 1.0
+    },
+    "cython_submit": {
+      "orders_per_sec_median": 2716422,
+      "orders_per_sec_min": 2660887,
+      "orders_per_sec_max": 2720873,
+      "trades_per_run": 16093,
+      "speedup_vs_reference": 213.1
+    },
+    "cython_raw": {
+      "orders_per_sec_median": 15908785,
+      "orders_per_sec_min": 15690372,
+      "orders_per_sec_max": 15977631,
+      "trades_per_run": 16093,
+      "speedup_vs_reference": 1248.0
+    }
+  },
+  "throughput_1000000_orders": {
+    "cython_submit": {
+      "orders_per_sec_median": 2689961,
+      "orders_per_sec_min": 2679973,
+      "orders_per_sec_max": 2693777,
+      "trades_per_run": 810698
+    },
+    "cython_raw": {
+      "orders_per_sec_median": 15858636,
+      "orders_per_sec_min": 15795397,
+      "orders_per_sec_max": 15937737,
+      "trades_per_run": 810698
+    }
+  },
+  "latency_us_20000_orders": {
+    "timer_overhead_ns_median": 42.0,
+    "reference": {
+      "p50": 77.812,
+      "p99": 170.792,
+      "max": 2453.583
+    },
+    "cython_submit": {
+      "p50": 0.167,
+      "p99": 1.459,
+      "max": 9.709
+    },
+    "cython_raw": {
+      "p50": 0.125,
+      "p99": 0.167,
+      "max": 8.333
+    }
+  },
+  "python": "3.14.6",
+  "machine": "macOS-15.6.1-arm64-arm-64bit-Mach-O"
+}

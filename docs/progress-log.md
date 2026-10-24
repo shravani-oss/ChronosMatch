@@ -93,6 +93,15 @@
 - Sanity differential check: 100,000 random orders over 5 seeds, identical trades and books.
 - Decisions D21 (up-front rejection when pool full) and D22 (C trade buffer). Suite: 136 passing.
 
+## 2026-10-24
+- Mid-review proof (b): differential tests, 6 flows x 6 seeds x 3,000 orders, Cython book and
+  reference book identical after every order. Planted-bug check: 36/36 differential tests failed
+  with a deliberate pricing bug, then reverted.
+- Order book benchmark: reference 12,747/s; Cython submit 2.72M/s (213x); Cython submit_raw
+  15.9M/s (1,248x vs the naive reference). p50 latency 0.17 us / 0.13 us vs 77.8 us.
+- Documented why the speedup headline must be qualified (naive baseline, timer resolution).
+- Suite: 173 passing.
+
 ## Learning debt (must be taught and walked through line by line before the mid review)
 - [ ] Part B check questions (time priority, partial fill, why arrival time matters)
 - [ ] Latency, processes vs threads, the GIL
@@ -106,4 +115,6 @@
 - [ ] Rehearse the demo_ipc.py demo and its evidence table (note 07)
 - [ ] Cython: .pyx, cdef, cdef class, malloc/free, compiling -> cython_book.pyx walkthrough
 - [ ] Order book data structures: arrays by price tick, node pool, linked FIFO (note 08)
+- [ ] Differential testing and the planted-bug check (note 09)
+- [ ] Reading benchmarks honestly: naive baselines, timer resolution, p50/p99 (note 09)
 - [ ] multiprocessing spawn -> ipc_demo.py and the two-process test walkthrough
