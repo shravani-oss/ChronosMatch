@@ -102,6 +102,17 @@
 - Documented why the speedup headline must be qualified (naive baseline, timer resolution).
 - Suite: 173 passing.
 
+## 2026-10-25
+- Connected the pipeline: engine process (`engine.py`) reads raw integers from the ring and
+  matches in the Cython book; `demo_pipeline.py` runs firehose + engine as separate processes.
+- Added an in-C trade fingerprint (count, quantity, notional, FNV-1a checksum) and a matching
+  pure-Python `TradeDigest`; added `RingBuffer.try_pop_raw`.
+- 1M-order pipeline runs: ~755k orders/sec, p50 latency 0.75 us, all PASS with identical
+  fingerprints; 200k run also equal to the reference book. Max latency spikes of 1-14 ms are
+  open (Week 3).
+- Caught two unfair quick benchmarks before the like-for-like one (fingerprint cost ~0.4%).
+- Decisions D23, D24. Suite: 183 passing.
+
 ## Learning debt (must be taught and walked through line by line before the mid review)
 - [ ] Part B check questions (time priority, partial fill, why arrival time matters)
 - [ ] Latency, processes vs threads, the GIL
@@ -117,4 +128,5 @@
 - [ ] Order book data structures: arrays by price tick, node pool, linked FIFO (note 08)
 - [ ] Differential testing and the planted-bug check (note 09)
 - [ ] Reading benchmarks honestly: naive baselines, timer resolution, p50/p99 (note 09)
+- [ ] Pipeline demo and the trade fingerprint (note 10): rehearse running and explaining it
 - [ ] multiprocessing spawn -> ipc_demo.py and the two-process test walkthrough

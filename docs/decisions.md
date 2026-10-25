@@ -120,4 +120,18 @@ Each entry: decision, alternatives, reason.
   afterwards for tests and normal use; `submit_raw` skips objects entirely. The buffer holds
   `capacity` records, the most trades one order can produce (one per resting order).
 
+## D23: Verify the engine with a trade fingerprint, not by shipping trades back
+- Alternatives: send every trade back to the demo process; write trades to a second ring;
+  trust the differential tests only.
+- Reason: a 4-number fingerprint (count, quantity, notional, 64-bit FNV-1a checksum of the
+  ordered trades) proves the same trades in the same order while keeping the data path free of
+  Python objects and pickle. It is computed in C during matching at no measurable cost.
+  A second "trades" ring (for the SQLite ledger) is a Week 4 item.
+
+## D24: Engine loop stays in Python for now, using raw integers
+- Alternatives: move the pop-and-match loop into Cython, reading the mmap directly.
+- Reason: the Python loop with `try_pop_raw` + `submit_raw` already outruns the firehose
+  (the engine is never the bottleneck). Moving the loop into Cython, with atomics for the ring
+  indices, is the Week 3 step and will be measured against today's numbers.
+
 ## Open decisions (to be made at design time)

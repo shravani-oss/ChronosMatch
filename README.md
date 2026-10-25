@@ -35,6 +35,16 @@ The firehose runs as a separate process, pickle is disabled in both processes, a
 the 1,000,000 orders is checked on arrival. Latest run: 1,000,000 received, 0 mismatches, PASS.
 See `docs/notes/07-mid-review-ipc-demo.md`.
 
+## Full pipeline demo (both proofs in one run)
+```bash
+PYTHONPATH=src python -m chronosmatch.demo_pipeline                      # 1M orders
+PYTHONPATH=src python -m chronosmatch.demo_pipeline --count 200000 --reference
+```
+Firehose process -> mmap ring -> Cython engine process, pickle disabled everywhere. The engine's
+trade fingerprint must equal an independent run (and the reference book with `--reference`).
+Latest 1M run: ~755k orders/sec end to end, p50 entry-to-match latency 0.75 us, PASS.
+See `docs/notes/10-pipeline-demo.md`.
+
 ## Mid-review proof (b): matching is correct
 `pytest tests/test_differential.py -v` checks the Cython book against a simple reference book
 on 108,000 random orders across 6 kinds of order flow: identical trades after every order.
