@@ -23,7 +23,7 @@ from pathlib import Path
 from types import TracebackType
 
 from chronosmatch import config
-from chronosmatch.order_record import pack_order_into, unpack_order_from
+from chronosmatch.order_record import ORDER_STRUCT, pack_order_into, unpack_order_from
 from chronosmatch.types import Order
 
 _META = struct.Struct("<IIQQ")
@@ -112,6 +112,16 @@ class RingBuffer:
             return None
         item = unpack_order_from(self._mm, self._slot_offset(read))  # 1. read data
         self._read_index[0] = read + 1  # 2. free the slot
+        return item
+
+    def try_pop_raw(self) -> tuple[int, int, int, int, int] | None:
+        """Consumer only. Like try_pop but returns plain integers and builds no Order object:
+        (order_id, timestamp_ns, price, quantity, side_code), or None if empty."""
+        read = self._read_index[0]
+        if self._write_index[0] - read <= 0:
+            return None
+        item = ORDER_STRUCT.unpack_from(self._mm, self._slot_offset(read))
+        self._read_index[0] = read + 1
         return item
 
     def close(self) -> None:

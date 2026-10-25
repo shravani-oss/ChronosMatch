@@ -8,13 +8,16 @@ Matching: `submit` (Python objects in/out) and `submit_raw` (C integers only) sh
 `_match` core, which writes trades into a preallocated C trade buffer.
 """
 
-from libc.stdint cimport int32_t, int64_t
+from libc.stdint cimport int32_t, int64_t, uint64_t
 from libc.stdlib cimport free, malloc
 
 from chronosmatch import config
 from chronosmatch.types import Side, Trade
 
 cdef int32_t NO_NODE = -1
+# FNV-1a 64-bit constants (see trade_digest.py for the identical Python version).
+cdef uint64_t FNV_OFFSET = 14695981039346656037ULL
+cdef uint64_t FNV_PRIME = 1099511628211ULL
 
 
 cdef struct Node:
@@ -52,6 +55,12 @@ cdef class CythonOrderBook:
     cdef int32_t resting_orders
 
     cdef TradeRec* trades         # one incoming order makes at most `capacity` trades
+
+    # Running totals over every trade ever made: a fingerprint of the whole trade history.
+    cdef int64_t total_trades
+    cdef int64_t total_traded_qty
+    cdef int64_t total_notional   # sum of price x quantity
+    cdef uint64_t checksum        # FNV-1a over (buy_id, sell_id, price, qty) of each trade
 
     def __cinit__(self, max_price=None, capacity=None):
         cdef int64_t i
@@ -92,6 +101,10 @@ cdef class CythonOrderBook:
         self.best_ask_px = self.max_price + 1
         self.resting_qty = 0
         self.resting_orders = 0
+        self.total_trades = 0
+        self.total_traded_qty = 0
+        self.total_notional = 0
+        self.checksum = FNV_OFFSET
 
     def __dealloc__(self):
         free(self.nodes)
@@ -115,6 +128,15 @@ cdef class CythonOrderBook:
     cdef void _release_node(self, int32_t node) noexcept:
         self.free_stack[self.free_top] = node
         self.free_top += 1
+
+    cdef inline void _record_trade(self, TradeRec* trade) noexcept:
+        self.total_trades += 1
+        self.total_traded_qty += trade.quantity
+        self.total_notional += trade.price * trade.quantity
+        self.checksum = (self.checksum ^ <uint64_t> trade.buy_order_id) * FNV_PRIME
+        self.checksum = (self.checksum ^ <uint64_t> trade.sell_order_id) * FNV_PRIME
+        self.checksum = (self.checksum ^ <uint64_t> trade.price) * FNV_PRIME
+        self.checksum = (self.checksum ^ <uint64_t> trade.quantity) * FNV_PRIME
 
     cdef int _rest(self, bint is_buy, int64_t order_id, int64_t price, int64_t qty) except -1:
         """Append an order at the tail of its price level (newest = last in the FIFO)."""
@@ -174,6 +196,7 @@ cdef class CythonOrderBook:
                     self.trades[n].sell_order_id = order_id
                 self.trades[n].price = level
                 self.trades[n].quantity = fill
+                self._record_trade(&self.trades[n])
                 n += 1
 
                 self.nodes[node].remaining -= fill
@@ -281,6 +304,11 @@ cdef class CythonOrderBook:
     @property
     def resting_order_count(self):
         return self.resting_orders
+
+    @property
+    def trade_stats(self):
+        """(total_trades, total_traded_qty, total_notional, checksum) since construction."""
+        return (self.total_trades, self.total_traded_qty, self.total_notional, self.checksum)
 
     @property
     def free_nodes(self):
