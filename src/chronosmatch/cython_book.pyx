@@ -332,6 +332,28 @@ cdef class CythonOrderBook:
                 price += 1
         return result
 
+    def top_levels(self, side, int depth):
+        """The best `depth` non-empty levels as (price, quantity), best first.
+
+        Stops as soon as `depth` levels are found, so it is cheap enough to call while running
+        (unlike `levels`, which walks the whole price range).
+        """
+        cdef int64_t price
+        result = []
+        if side is Side.BUY:
+            price = self.best_bid_px
+            while price >= 1 and len(result) < depth:
+                if self.bid_qty[price] > 0:
+                    result.append((price, self.bid_qty[price]))
+                price -= 1
+        else:
+            price = self.best_ask_px
+            while price <= self.max_price and len(result) < depth:
+                if self.ask_qty[price] > 0:
+                    result.append((price, self.ask_qty[price]))
+                price += 1
+        return result
+
     def queue_order_ids(self, side, int64_t price):
         """Order ids waiting at one price level, oldest first (for testing time priority)."""
         if price < 1 or price > self.max_price:

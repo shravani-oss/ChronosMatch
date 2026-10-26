@@ -42,3 +42,11 @@ NS_PER_SEC: int = 1_000_000_000
 # Cython order book (see docs/notes/08-cython-order-book-design.md).
 BOOK_MAX_PRICE_TICKS: int = 10_000        # valid prices are 1..BOOK_MAX_PRICE_TICKS
 BOOK_MAX_RESTING_ORDERS: int = 1 << 20    # size of the preallocated order-node pool
+
+# Live telemetry for the dashboard (see docs/notes/11-dashboard.md).
+TELEMETRY_MAGIC: int = 0x544C4D43           # b"CMLT" read little-endian
+TELEMETRY_DEPTH: int = 5                    # price levels shown per side
+TELEMETRY_INTERVAL_NS: int = 100_000_000    # engine publishes at most every 100 ms
+TELEMETRY_CHECK_EVERY: int = 1_024          # orders between "is it time to publish?" checks
+TELEMETRY_LATENCY_SAMPLE: int = 2_048       # most recent latencies used for live p50/p99
+DASHBOARD_REFRESH_S: float = 0.1
