@@ -113,6 +113,29 @@
 - Caught two unfair quick benchmarks before the like-for-like one (fingerprint cost ~0.4%).
 - Decisions D23, D24. Suite: 183 passing.
 
+## 2026-10-26 (Weeks 1-2 deadline)
+- Live telemetry: engine publishes a seqlock snapshot into shared memory ~10x/s;
+  `CythonOrderBook.top_levels` for cheap depth snapshots.
+- **Bug found and fixed:** identical seeded runs gave different trade counts. Diagnosed stale
+  ring reads on ARM (~1 per million orders: consumer saw the new index before the data). Fixed
+  with acquire/release atomics (`atomics.pyx`) for ring and telemetry indices. 0 stale reads in
+  6M checked orders after the fix; ring throughput unchanged (1.69M/s).
+- curses dashboard (best bid/ask, spread, 5 levels per side, rate, latency) and one-command live
+  demo (`python -m chronosmatch.live`), with a headless mode.
+- README rewritten; viva prep extended for all Weeks 1-2 modules; notes 04, 07, 10, 11 updated.
+- Suite: 206 passing.
+
+## Weeks 1-2 summary (status at 26 Oct)
+| Planned | Status |
+|---|---|
+| mmap ring buffer with struct records | Done (notes 03, 04), ARM ordering bug fixed |
+| asyncio firehose, 100k orders/sec | Done: 99,979/s at target, 831k/s unlimited (note 06) |
+| Cython limit order book, price-time priority | Done: 15.9M orders/s raw (notes 08, 09) |
+| curses dashboard, top of book | Done (note 11) |
+| Mid review (a): 1M orders between processes, no pickle | Done: `demo_ipc`, `demo_pipeline` |
+| Mid review (b): matching correct | Done: differential tests, fingerprint check |
+| Deferred | Websocket feed (D16); tail latency (Week 3) |
+
 ## Learning debt (must be taught and walked through line by line before the mid review)
 - [ ] Part B check questions (time priority, partial fill, why arrival time matters)
 - [ ] Latency, processes vs threads, the GIL
@@ -129,4 +152,6 @@
 - [ ] Differential testing and the planted-bug check (note 09)
 - [ ] Reading benchmarks honestly: naive baselines, timer resolution, p50/p99 (note 09)
 - [ ] Pipeline demo and the trade fingerprint (note 10): rehearse running and explaining it
+- [ ] Memory ordering, acquire/release, the stale-read bug and fix (note 04): rehearse as an interview story
+- [ ] Seqlock and the dashboard design (note 11)
 - [ ] multiprocessing spawn -> ipc_demo.py and the two-process test walkthrough

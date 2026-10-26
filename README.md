@@ -1,73 +1,101 @@
 # ChronosMatch
 
-Zero-copy high-frequency trading engine in Python + Cython.
+A learning-grade, zero-copy limit order book matching engine in Python + Cython.
 
-## Modules
-- **Cython Matching Engine** – Limit Order Book compiled to a C extension (C-structs and pointers, no Python objects).
-- **Zero-Copy IPC Bus** – mmap + struct ring buffer shared between processes.
-- **Market Simulator** – asyncio websocket client simulating a firehose of tick data.
-- **Latency Monitor** – curses terminal dashboard showing end-to-end latency in microseconds.
+A Python **firehose** process writes orders as raw 32-byte records into a **memory-mapped ring
+buffer**. A separate **Cython matching engine** process reads the same memory, with no pickle or
+JSON on the data path, and matches orders with price-time priority. A **curses dashboard**
+shows the live top of book and latency in microseconds.
+
+> Honest scope: real HFT systems use C++ or FPGAs. This project demonstrates the techniques
+> (zero-copy IPC, lock-free SPSC ring, C data structures, measured latency) and states its
+> limits; see the notes in `docs/notes/`.
+
+## Architecture
+
+```
+ firehose process              shared memory                engine process
++-------------------+     +-----------------------+     +------------------------+
+| asyncio, 100k/s   | --> | SPSC ring buffer      | --> | Cython order book      |
+| stamps entry time |     | mmap, 32-byte records |     | price-indexed arrays,  |
++-------------------+     | acquire/release index |     | FIFO per price level   |
+                          +-----------------------+     +-----------+------------+
+                                                                    | ~10x per second
+                          +-----------------------+                 v
+ dashboard process  <---- | telemetry block       | <---------------+
+ (curses)                 | mmap, seqlock         |
+                          +-----------------------+
+```
 
 ## Setup (macOS)
 ```bash
-xcode-select --install          # C compiler, needed for Cython later
+xcode-select --install                # C compiler for Cython
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-python setup.py build_ext --inplace   # compile the Cython modules
-pytest                          # run the tests
+python setup.py build_ext --inplace   # compile the Cython modules (rerun after editing .pyx)
+pytest                                # 206 tests
 ```
+
+## Demos
+All commands from the repo root with the venv active.
+
+| Command | What it shows |
+|---|---|
+| `PYTHONPATH=src python -m chronosmatch.live` | Live dashboard: 2M orders at 100k/s through the full pipeline (q quits) |
+| `PYTHONPATH=src python -m chronosmatch.demo_pipeline` | Full pipeline, 1M orders, engine's trades verified, PASS/FAIL |
+| `PYTHONPATH=src python -m chronosmatch.demo_pipeline --count 200000 --reference` | Same, also checked against the pure-Python reference book |
+| `PYTHONPATH=src python -m chronosmatch.demo_ipc` | 1M orders between two processes, pickle disabled, every order checked |
+| `pytest tests/test_differential.py -v` | Cython book vs reference book on 108,000 random orders |
+
+### Mid-review proofs
+- **(a) 1M orders between two processes without pickling:** `demo_ipc` and `demo_pipeline`
+  disable `pickle` in every process (any use would crash) and verify all 1,000,000 orders.
+  Notes 07 and 10.
+- **(b) Buy/sell orders match correctly:** differential tests against a hand-checkable reference
+  book (identical trades after every order, 6 kinds of order flow), 20 shared rule tests, 11
+  edge-case tests, and a trade fingerprint check in the pipeline demo. A deliberately planted bug
+  made 36/36 differential tests fail. Notes 08 and 09.
+
+## Results
+macOS 15.6.1, Apple Silicon, Python 3.14.6, Cython 3.3.0. Medians of repeated runs; details and
+caveats in `docs/notes/`.
+
+| What | Result | Note |
+|---|---|---|
+| Orders between two processes, mmap ring | **1.69M orders/sec** | 05, 04 |
+| Same with `multiprocessing.Queue` (pickle) | 141k orders/sec (ring ~12x faster) | 05 |
+| One order to bytes and back: struct / JSON / pickle | 594 / 2,293 / 3,660 ns | 05 |
+| asyncio firehose, unlimited / at 100k target | 831k / 99,979 orders/sec | 06 |
+| Reference order book (pure Python) | 12.7k orders/sec, p50 77.8 us | 02, 09 |
+| Cython book `submit` / `submit_raw` | 2.7M / 15.9M orders/sec | 09 |
+| Full pipeline, 1M orders, unlimited | 825k orders/sec, p50 0.75 us, p99 0.88 us | 10 |
+
+Reproduce: `python benchmarks/bench_ipc.py` (also `bench_serialization`, `bench_firehose`,
+`bench_reference_book`, `bench_order_books`). Raw results in `benchmarks/results/`.
+
+**Caveats:** the Cython speedup is against our deliberately simple reference book, not an
+optimised pure-Python book (note 09). Sub-microsecond latencies are limited by the ~42 ns
+timer resolution. Tail latency at a paced 100k/s is not yet under control (p99 varies from
+~1 us to ~200 us between runs, max spikes up to ~18 ms): Week 3 work.
+
+## Bugs found along the way
+- **Stale reads on ARM (fixed 26 Oct):** without acquire/release ordering, the ring's consumer
+  occasionally (~1 per million orders) read a slot's previous contents. Found because identical
+  runs gave different trade counts; fixed with C atomics; 0 stale reads in 6M checked orders
+  afterwards. Note 04.
 
 ## Layout
 ```
-src/chronosmatch/   package code (config.py holds all constants)
+src/chronosmatch/   package (config.py holds all constants; *.pyx are Cython)
 tests/              pytest tests
-docs/               notes, glossary, decisions, progress log
-learning/           small throwaway toy scripts used while learning
+benchmarks/         benchmark scripts and saved JSON results
+docs/notes/         one note per module: design, code walkthrough, results, gotchas
+docs/               glossary, decisions log, viva prep, progress log
+learning/           small toy scripts used while learning
 ```
-
-## Mid-review demo: 1M orders between two processes, no pickle
-```bash
-PYTHONPATH=src python -m chronosmatch.demo_ipc                 # unlimited speed
-PYTHONPATH=src python -m chronosmatch.demo_ipc --rate 100000   # at the 100k/sec target
-```
-The firehose runs as a separate process, pickle is disabled in both processes, and every one of
-the 1,000,000 orders is checked on arrival. Latest run: 1,000,000 received, 0 mismatches, PASS.
-See `docs/notes/07-mid-review-ipc-demo.md`.
-
-## Full pipeline demo (both proofs in one run)
-```bash
-PYTHONPATH=src python -m chronosmatch.demo_pipeline                      # 1M orders
-PYTHONPATH=src python -m chronosmatch.demo_pipeline --count 200000 --reference
-```
-Firehose process -> mmap ring -> Cython engine process, pickle disabled everywhere. The engine's
-trade fingerprint must equal an independent run (and the reference book with `--reference`).
-Latest 1M run: ~755k orders/sec end to end, p50 entry-to-match latency 0.75 us, PASS.
-See `docs/notes/10-pipeline-demo.md`.
-
-## Mid-review proof (b): matching is correct
-`pytest tests/test_differential.py -v` checks the Cython book against a simple reference book
-on 108,000 random orders across 6 kinds of order flow: identical trades after every order.
-
-## Results so far
-Measured on macOS 15.6.1, Apple Silicon, Python 3.14.6. Details in `docs/notes/`.
-
-| What | Result |
-|---|---|
-| Orders between two processes, mmap ring buffer | **1.66M orders/sec** |
-| Same, `multiprocessing.Queue` (pickle) | 139k orders/sec (ring is 11.9x faster) |
-| Encode + decode one order: struct / JSON / pickle | 594 ns / 2,293 ns / 3,660 ns |
-| asyncio firehose into the ring (separate process), unlimited | 831k orders/sec |
-| asyncio firehose at the 100k/sec target | 99,979 orders/sec |
-| Pure-Python reference order book (matching) | 12.8k orders/sec, p50 77 us |
-| Cython order book, `submit` (Python objects) | 2.7M orders/sec, p50 0.17 us |
-| Cython order book, `submit_raw` (integers only) | 15.9M orders/sec, p50 0.13 us |
-
-Reproduce: `python benchmarks/bench_ipc.py`, `python benchmarks/bench_serialization.py`,
-`python benchmarks/bench_reference_book.py`, `python benchmarks/bench_firehose.py`, `python benchmarks/bench_order_books.py`.
-
-The Cython speedup is measured against our deliberately simple reference book, not against an
-optimised pure-Python book; see `docs/notes/09-order-book-benchmarks.md`.
 
 ## Status
-Project scaffolding. Work in progress.
+Weeks 1-2 complete (ring buffer, firehose, Cython order book, pipeline, dashboard).
+Next: Week 3 (remove Python objects from the hot loop, GC control, tail latency),
+Week 4 (SQLite trade ledger, whale-order highlighting).
