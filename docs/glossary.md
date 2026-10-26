@@ -54,3 +54,8 @@ Terms are added as they appear in the project.
 | **Linked list** | Items that each store the index of the next item; here, the FIFO queue at one price level. |
 | **Sweep** | An incoming order that consumes several price levels in one go. |
 | **Sentinel value** | A special "impossible" value meaning "none", e.g. best bid 0 = no bids. |
+| **Release store** | A write that guarantees all earlier writes are visible to other cores before it is. |
+| **Acquire load** | A read that guarantees no later read returns data older than it. |
+| **Memory fence** | An instruction that stops the CPU reordering memory operations across it. |
+| **Seqlock** | A writer bumps a counter to odd, writes, bumps to even; readers retry if the counter was odd or changed. |
+| **Stale read** | Reading old data that was already replaced, because the new data was not yet visible. |

@@ -39,8 +39,9 @@ Exit code 0 and `RESULT: PASS` only if every order arrived intact and in order.
 - The pickle guard disables the public `pickle` API; code calling the C module `_pickle`
   directly would bypass it. Nothing in our code does, and the transport path is only
   `struct.pack_into` / `unpack_from` on the mmap.
-- The memory-ordering caveat (note 04) still applies; 0 mismatches across 4M checked orders
-  today is strong practical evidence, not a formal guarantee.
+- **Update 26 Oct:** the memory-ordering risk turned out to be a real bug (about 1 stale read per
+  million orders with a faster consumer); this demo's 0 mismatches came from a slower consumer
+  that did not expose it. Fixed with acquire/release atomics (note 04).
 
 ## Likely viva questions
 - *How do you know it didn't pickle?* Pickle raises in both processes, and the demo passed.

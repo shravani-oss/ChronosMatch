@@ -55,3 +55,12 @@ While checking the fingerprint's cost, a quick script first reported 13.7M/s (it
 `f(*row)`, a different calling style) and then 7.7M/s (the loop ran at module level, where every
 variable is a dictionary lookup instead of a fast local). Only calling the benchmark's own
 `run_raw` function gave a like-for-like number. Lesson: compare with identical code paths.
+
+## Update 26 Oct: a stale-read bug was present in these runs
+The 25 Oct runs above passed, but the ring had a memory-ordering bug (about 1 stale read per
+million orders, note 04). Those runs did not happen to hit it; a 300k run at 100k/s on 26 Oct did
+and FAILED, which is how it was found. After the acquire/release fix:
+- 300k at 100k/s, 3 runs: PASS. 1M unlimited: 825,233 orders/sec, p50 0.75 us, p99 0.875 us,
+  PASS. 1M at 100k/s: p50 0.75 us, p99 197 us, max 18.1 ms, PASS.
+- Tail latency at a paced 100k/s varies a lot between runs (p99 from ~1 us to ~200 us, max up to
+  ~18 ms), with or without the dashboard. Not explained yet: Week 3.

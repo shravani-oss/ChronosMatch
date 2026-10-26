@@ -5,7 +5,8 @@ One writer (the engine) and any number of readers. Consistency uses a *seqlock*:
     reader: read seq, read payload, read seq again; accept only if both reads are the same
             even number, otherwise retry.
 So a reader never shows a half-written snapshot, and the writer never waits for readers.
-(Same CPU memory-ordering caveat as the ring buffer, note 04.)
+Ordering on ARM is enforced with acquire/release atomics and fences (atomics.pyx), the same
+fix as the ring buffer (note 04).
 
 Layout: [0, 8) seq u64 | [8, 12) magic u32 | [64, ...) payload (struct below)
 """
@@ -16,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from chronosmatch import config
+from chronosmatch.atomics import AtomicU64, fence_acquire, fence_release
 
 _SEQ_OFFSET = 0
 _MAGIC = struct.Struct("<I")
@@ -61,9 +63,7 @@ class TelemetryBlock:
             raise ValueError("not a ChronosMatch telemetry file (bad magic)")
         self._file = file
         self._mm = mm
-        view = memoryview(mm)
-        self._seq = view[_SEQ_OFFSET : _SEQ_OFFSET + 8].cast("Q")
-        view.release()
+        self._seq = AtomicU64(mm, _SEQ_OFFSET)
 
     @classmethod
     def create(cls, path: str | Path) -> "TelemetryBlock":
@@ -86,8 +86,9 @@ class TelemetryBlock:
             padded = list(side[:_DEPTH]) + [(0, 0)] * (_DEPTH - min(len(side), _DEPTH))
             for price, qty in padded:
                 levels += [price, qty]
-        seq = self._seq[0]
-        self._seq[0] = seq + 1  # odd: writing
+        seq = self._seq.load()
+        self._seq.store(seq + 1)  # odd: writing
+        fence_release()           # the odd value is visible before any payload byte changes
         _PAYLOAD.pack_into(
             self._mm, _PAYLOAD_OFFSET,
             snap.processed, snap.trades, snap.traded_qty,
@@ -95,22 +96,23 @@ class TelemetryBlock:
             snap.latency_p50_ns, snap.latency_p99_ns, snap.target_count, int(snap.done),
             *levels,
         )
-        self._seq[0] = seq + 2  # even: stable
+        self._seq.store(seq + 2)  # even: stable (release: payload visible first)
 
     @property
     def sequence(self) -> int:
-        return self._seq[0]
+        return self._seq.load()
 
     def read(self) -> Snapshot | None:
         """A consistent snapshot, or None if nothing was published yet (or the writer is stuck)."""
         for _ in range(_READ_ATTEMPTS):
-            before = self._seq[0]
+            before = self._seq.load()  # acquire
             if before == 0:
                 return None
             if before % 2:
                 continue
             values = _PAYLOAD.unpack_from(self._mm, _PAYLOAD_OFFSET)
-            if self._seq[0] == before:
+            fence_acquire()  # payload reads finish before the second sequence read
+            if self._seq.load() == before:
                 return _to_snapshot(values)
         return None
 

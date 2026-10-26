@@ -134,4 +134,11 @@ Each entry: decision, alternatives, reason.
   (the engine is never the bottleneck). Moving the loop into Cython, with atomics for the ring
   indices, is the Week 3 step and will be measured against today's numbers.
 
+## D25: Ring and telemetry indices use acquire/release atomics (Cython + C built-ins)
+- Alternatives: keep plain Python memoryview writes and rely on timing; a lock (mutex) in shared
+  memory; a pipe/semaphore to signal new data.
+- Reason: a measured bug (~1 stale read per million orders on Apple Silicon) proved plain writes
+  are not safe. Release/acquire is the minimal, lock-free ordering an SPSC ring needs; a lock or
+  a syscall per order would cost far more. Measured cost: none (1.69M vs 1.66M orders/sec).
+
 ## Open decisions (to be made at design time)

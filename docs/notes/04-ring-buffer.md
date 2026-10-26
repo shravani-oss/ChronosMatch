@@ -46,11 +46,36 @@ See D12 to D15 in `docs/decisions.md`.
   Run 20 times in a row on 2026-10-18: 20/20 passed (1,000,000 orders checked in total).
   This is groundwork for mid-review proof (a); the dedicated 1M demo script comes later.
 
-## Known limitation (important, say it in the viva)
-Python gives no **memory-ordering guarantee**. On Apple Silicon (ARM), the CPU may in theory
-make the index update visible to another core before the record bytes. In practice the many
-interpreter instructions between the two writes make this extremely unlikely, and the
-two-process test checks every record, but it is not a formal guarantee. The fix belongs in the
-Cython engine (Week 3): C11 atomics with release (producer) / acquire (consumer) ordering.
-The 8-byte index itself is written through a native 'Q' memoryview, which on 64-bit CPUs is a
-single aligned store in practice.
+## Bug found and fixed: stale reads on ARM (26 Oct) - say this in the viva
+**What I originally wrote (18 Oct):** Python gives no memory-ordering guarantee, but the many
+interpreter instructions between the two writes make a problem "extremely unlikely".
+**That was wrong.**
+
+**How it was found:** on 26 Oct the live dashboard showed slightly different trade counts for
+identical seeded runs. Matching is deterministic, so the engine had to be receiving different
+data. The 25 Oct pipeline demo then FAILED at 300k orders / 100k per second.
+
+**Diagnosis:** a consumer comparing every record with the expected stream found that, e.g., at
+index 232,038 it received order 166,503: exactly what that slot held one lap (65,536 slots)
+earlier. The consumer had seen the new `write_index` but read the slot *before* the new bytes
+were visible to its core. ARM CPUs (Apple Silicon) may make stores visible to other cores out of
+order, and may perform loads out of order. Measured rate: **3 stale reads in 3,000,000 orders**
+(plus 1 in another 900k), roughly 1 per million.
+It became visible once the engine used `try_pop_raw` (25 Oct), which reads the slot sooner after
+the index than `try_pop` did; that is why earlier tests (note 07) saw 0 mismatches.
+
+**Fix:** `atomics.pyx` exposes C11-style atomics from the C compiler:
+- producer: write record, then **release-store** `write_index` (data visible first);
+- consumer: **acquire-load** `write_index`, then read the record;
+- consumer frees a slot with a release-store of `read_index`; producer acquire-loads it before
+  overwriting a slot.
+The telemetry seqlock got the same treatment (plus fences).
+
+**Evidence after the fix:** 6,000,000 orders (20 runs x 300k at 100k/s) with every record
+checked: **0 stale reads**. At the old rate (~1 per million), a clean run of 6M would happen by
+chance only about e^-6 = 0.25% of the time. Strong evidence, not a formal proof. Ring throughput
+is unchanged (1.69M orders/sec vs 1.66M before, `benchmarks/bench_ipc.py`).
+
+**Lesson for the viva:** "unlikely in practice" is not a correctness argument for concurrent
+code; I stated a known risk, deferred it, and it turned into a real bug the moment the timing
+changed. The fix belongs to the data structure, not to luck.

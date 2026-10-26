@@ -61,7 +61,7 @@ def test_reader_refuses_a_snapshot_being_written(tmp_path: Path) -> None:
     """Simulate a writer stopped mid-write (odd sequence): the reader must not return data."""
     with TelemetryBlock.create(tmp_path / "t.tel") as tel:
         tel.publish(snap())
-        tel._seq[0] = tel._seq[0] + 1  # odd = "writing in progress"
+        tel._seq.store(tel._seq.load() + 1)  # odd = "writing in progress"
         assert tel.read() is None
 
 

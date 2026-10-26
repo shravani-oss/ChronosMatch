@@ -12,9 +12,12 @@ File layout:
 Indices only ever increase; the slot for index i is i & (capacity - 1).
     empty  <=>  write_index == read_index
     full   <=>  write_index - read_index == capacity
-Publish order: the producer writes the record first, then advances write_index, so the
-consumer never sees an index pointing at a half-written record (see the limitation note in
-docs/notes/04-ring-buffer.md about CPU memory ordering).
+Publish order: the producer writes the record first, then advances write_index with a
+*release* store; the consumer reads write_index with an *acquire* load before reading the
+record. Without this pairing, ARM CPUs (Apple Silicon) were measured to let the consumer read a
+slot's previous contents about once per million orders (see docs/notes/04-ring-buffer.md).
+The consumer frees a slot the same way: it finishes reading, then release-stores read_index;
+the producer acquire-loads read_index before overwriting a slot.
 """
 
 import mmap
@@ -23,11 +26,11 @@ from pathlib import Path
 from types import TracebackType
 
 from chronosmatch import config
+from chronosmatch.atomics import AtomicU64
 from chronosmatch.order_record import ORDER_STRUCT, pack_order_into, unpack_order_from
 from chronosmatch.types import Order
 
 _META = struct.Struct("<IIQQ")
-_INDEX_BYTES = 8
 
 
 class RingBuffer:
@@ -49,15 +52,9 @@ class RingBuffer:
         self._capacity = capacity
         self._mask = capacity - 1
         self._slot_size = slot_size
-        # 8-byte views cast to unsigned 64-bit ints: reading/writing [0] touches shared memory.
-        view = memoryview(mm)
-        self._write_index = view[
-            config.RING_WRITE_INDEX_OFFSET : config.RING_WRITE_INDEX_OFFSET + _INDEX_BYTES
-        ].cast("Q")
-        self._read_index = view[
-            config.RING_READ_INDEX_OFFSET : config.RING_READ_INDEX_OFFSET + _INDEX_BYTES
-        ].cast("Q")
-        view.release()
+        # Indices live in shared memory; load() is an acquire load, store() a release store.
+        self._write_index = AtomicU64(mm, config.RING_WRITE_INDEX_OFFSET)
+        self._read_index = AtomicU64(mm, config.RING_READ_INDEX_OFFSET)
 
     @classmethod
     def create(cls, path: str | Path, capacity: int = config.RING_DEFAULT_CAPACITY) -> "RingBuffer":
@@ -91,37 +88,37 @@ class RingBuffer:
         return self._capacity
 
     def __len__(self) -> int:
-        return max(0, self._write_index[0] - self._read_index[0])
+        return max(0, self._write_index.load() - self._read_index.load())
 
     def _slot_offset(self, index: int) -> int:
         return config.RING_HEADER_SIZE + (index & self._mask) * self._slot_size
 
     def try_push(self, order: Order, timestamp_ns: int = 0) -> bool:
         """Producer only. Write one order; return False (and write nothing) if full."""
-        write = self._write_index[0]
-        if write - self._read_index[0] >= self._capacity:
+        write = self._write_index.load()
+        if write - self._read_index.load() >= self._capacity:  # acquire: consumer is done with the slot
             return False
         pack_order_into(self._mm, self._slot_offset(write), order, timestamp_ns)  # 1. data
-        self._write_index[0] = write + 1  # 2. publish
+        self._write_index.store(write + 1)  # 2. publish (release: data visible first)
         return True
 
     def try_pop(self) -> tuple[Order, int] | None:
         """Consumer only. Return (order, timestamp_ns), or None if empty."""
-        read = self._read_index[0]
-        if self._write_index[0] - read <= 0:
+        read = self._read_index.load()
+        if self._write_index.load() - read <= 0:  # acquire: the record is fully visible
             return None
         item = unpack_order_from(self._mm, self._slot_offset(read))  # 1. read data
-        self._read_index[0] = read + 1  # 2. free the slot
+        self._read_index.store(read + 1)  # 2. free the slot (release: reads finished first)
         return item
 
     def try_pop_raw(self) -> tuple[int, int, int, int, int] | None:
         """Consumer only. Like try_pop but returns plain integers and builds no Order object:
         (order_id, timestamp_ns, price, quantity, side_code), or None if empty."""
-        read = self._read_index[0]
-        if self._write_index[0] - read <= 0:
+        read = self._read_index.load()
+        if self._write_index.load() - read <= 0:  # acquire: the record is fully visible
             return None
         item = ORDER_STRUCT.unpack_from(self._mm, self._slot_offset(read))
-        self._read_index[0] = read + 1
+        self._read_index.store(read + 1)
         return item
 
     def close(self) -> None:
