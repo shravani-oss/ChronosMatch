@@ -73,13 +73,19 @@ def reference_trade_stats(count: int, seed: int) -> tuple[int, int, int, int]:
 
 
 def run_pipeline(
-    ring_path: Path, count: int, seed: int, rate: int, capacity: int, with_reference: bool
+    ring_path: Path,
+    count: int,
+    seed: int,
+    rate: int,
+    capacity: int,
+    with_reference: bool,
+    engine_args: tuple[str, ...] = (),
 ) -> PipelineResult:
     env = {**os.environ, "PYTHONPATH": str(_SRC_DIR)}
     with RingBuffer.create(ring_path, capacity):
         engine = subprocess.Popen(
             [sys.executable, "-m", "chronosmatch.engine", "--ring", str(ring_path),
-             "--count", str(count), "--forbid-pickle"],
+             "--count", str(count), "--forbid-pickle", *engine_args],
             env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
         firehose = subprocess.Popen(
@@ -130,7 +136,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  engine    : processed={e['processed']:,} rate={rate:,.0f}/s "
               f"best_bid={e['best_bid']} best_ask={e['best_ask']}")
         print(f"  latency   : entry->matched p50={e['latency_p50_us']} us "
-              f"p99={e['latency_p99_us']} us max={e['latency_max_us']} us")
+              f"p99={e['latency_p99_us']} us p99.9={e['latency_p999_us']} us "
+              f"max={e['latency_max_us']} us")
+        gc_info = e["gc"]
+        print(f"  gc        : mode={e['gc_mode']} collections(gen0,1,2)={gc_info['collections']} "
+              f"total pause={gc_info['total_pause_us']} us max pause={gc_info['max_pause_us']} us")
         print(f"  trades    : engine    {tuple(e['trade_stats'])}")
     print(f"  trades    : expected  {r.expected_stats}")
     if r.reference_stats is not None:

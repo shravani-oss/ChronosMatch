@@ -10,6 +10,7 @@ summary after the run, not the order data path.
 """
 
 import argparse
+import gc
 import json
 import sys
 import time
@@ -18,6 +19,7 @@ from dataclasses import asdict, dataclass
 
 from chronosmatch import config
 from chronosmatch.cython_book import CythonOrderBook
+from chronosmatch.gc_monitor import GcMonitor
 from chronosmatch.no_pickle import forbid_pickle
 from chronosmatch.ring_buffer import RingBuffer
 from chronosmatch.telemetry import Snapshot, TelemetryBlock
@@ -33,6 +35,7 @@ class EngineResult:
     trade_stats: tuple[int, int, int, int]
     latency_p50_us: float
     latency_p99_us: float
+    latency_p999_us: float
     latency_max_us: float
     best_bid: int | None
     best_ask: int | None
@@ -125,6 +128,7 @@ def run_engine(
         trade_stats=book.trade_stats,
         latency_p50_us=round(pick(0.50), 3) if count else 0.0,
         latency_p99_us=round(pick(0.99), 3) if count else 0.0,
+        latency_p999_us=round(pick(0.999), 3) if count else 0.0,
         latency_max_us=round(ordered[-1] / 1_000, 3) if count else 0.0,
         best_bid=book.best_bid,
         best_ask=book.best_ask,
@@ -137,18 +141,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--count", type=int, required=True)
     parser.add_argument("--forbid-pickle", action="store_true")
     parser.add_argument("--telemetry", help="telemetry file created by TelemetryBlock.create")
+    parser.add_argument(
+        "--gc", choices=("on", "off"), default="on",
+        help="off = freeze existing objects and disable the cyclic GC for the run (experiment)",
+    )
     args = parser.parse_args(argv)
     if args.forbid_pickle:
         forbid_pickle()
+    if args.gc == "off":
+        gc.freeze()   # move everything allocated so far out of the GC's view
+        gc.disable()  # no automatic cyclic collections; refcounting still frees memory
 
     telemetry = TelemetryBlock.attach(args.telemetry) if args.telemetry else None
     try:
-        with RingBuffer.attach(args.ring) as ring:
+        with RingBuffer.attach(args.ring) as ring, GcMonitor() as gc_mon:
             result = run_engine(ring, CythonOrderBook(), args.count, telemetry=telemetry)
     finally:
         if telemetry is not None:
             telemetry.close()
-    print(json.dumps(asdict(result)))
+    print(json.dumps({**asdict(result), "gc_mode": args.gc, "gc": gc_mon.summary()}))
     return 0
 
 
