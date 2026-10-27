@@ -34,7 +34,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python setup.py build_ext --inplace   # compile the Cython modules (rerun after editing .pyx)
-pytest                                # 206 tests
+pytest                                # 210 tests
 ```
 
 ## Demos
@@ -47,6 +47,7 @@ All commands from the repo root with the venv active.
 | `PYTHONPATH=src python -m chronosmatch.demo_pipeline --count 200000 --reference` | Same, also checked against the pure-Python reference book |
 | `PYTHONPATH=src python -m chronosmatch.demo_ipc` | 1M orders between two processes, pickle disabled, every order checked |
 | `pytest tests/test_differential.py -v` | Cython book vs reference book on 108,000 random orders |
+| `python scripts/review_check.py` | Runs every proof above and prints a PASS/FAIL checklist |
 
 ### Mid-review proofs
 - **(a) 1M orders between two processes without pickling:** `demo_ipc` and `demo_pipeline`
@@ -77,7 +78,10 @@ Reproduce: `python benchmarks/bench_ipc.py` (also `bench_serialization`, `bench_
 **Caveats:** the Cython speedup is against our deliberately simple reference book, not an
 optimised pure-Python book (note 09). Sub-microsecond latencies are limited by the ~42 ns
 timer resolution. Tail latency at a paced 100k/s is not yet under control (p99 varies from
-~1 us to ~200 us between runs, max spikes up to ~18 ms): Week 3 work.
+~1 us to ~200 us between runs, max spikes up to ~18 ms). Investigation so far (note 12): not
+garbage collection (0 collections during engine runs); consistent with the OS stopping
+busy-spinning processes on a contended 4-performance-core M1 (a hiccup meter saw gaps up to
+~15 ms).
 
 ## Bugs found along the way
 - **Stale reads on ARM (fixed 26 Oct):** without acquire/release ordering, the ring's consumer

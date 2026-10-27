@@ -136,6 +136,16 @@
 | Mid review (b): matching correct | Done: differential tests, fingerprint check |
 | Deferred | Websocket feed (D16); tail latency (Week 3) |
 
+## 2026-10-27 (mid-review window opens)
+- Mid-review readiness: `scripts/review_check.py` runs every proof (6/6 PASS, full and quick
+  modes) and `docs/mid-review-runbook.md` (demo order, what to say, fallbacks).
+- Week 3 started: GC monitor (`gc_monitor.py`), p99.9 latency, `--gc off` switch.
+- Tail-latency investigation (note 12): GC rejected (0 collections in all engine runs; on/off no
+  consistent difference once runs were interleaved). OS scheduling supported: hiccup meter saw
+  gaps up to 14.8 ms while the pipeline ran vs at most 96 us alone (Apple M1, 4 P-cores).
+- Caught two flaws in my own experiments (run-order confound; GIL artefact from using a thread).
+- Suite: 210 passing.
+
 ## Learning debt (must be taught and walked through line by line before the mid review)
 - [ ] Part B check questions (time priority, partial fill, why arrival time matters)
 - [ ] Latency, processes vs threads, the GIL
@@ -154,4 +164,6 @@
 - [ ] Pipeline demo and the trade fingerprint (note 10): rehearse running and explaining it
 - [ ] Memory ordering, acquire/release, the stale-read bug and fix (note 04): rehearse as an interview story
 - [ ] Seqlock and the dashboard design (note 11)
+- [ ] GC: refcounting vs cyclic GC, thresholds, why the engine never collects (note 12)
+- [ ] Tail latency, OS scheduling, the hiccup meter, experiment design pitfalls (note 12)
 - [ ] multiprocessing spawn -> ipc_demo.py and the two-process test walkthrough

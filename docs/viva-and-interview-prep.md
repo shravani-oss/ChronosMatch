@@ -170,3 +170,23 @@ terminal dashboard shows the live order book. Along the way I found and fixed a 
 bug on Apple Silicon: without acquire/release memory ordering, the reader occasionally saw stale
 data. It's not a production HFT system; the honest remaining weakness is tail latency, which is
 what I'm working on next.
+
+## Week 3: Tail latency
+
+**Q: Your p50 is under a microsecond but your max is milliseconds. Why?**
+A: I tested two hypotheses. Garbage collection: I instrumented every GC run with `gc.callbacks`
+and the engine performed zero collections, because each per-order object is freed immediately
+by reference counting, so the collection threshold is never reached. Disabling GC made no
+consistent difference. OS scheduling: a "hiccup meter" that just spins reading the clock saw
+gaps of up to ~15 ms while the pipeline ran, the same size as the engine's spikes. On a laptop
+with 4 performance cores and several spinning processes, the OS takes cores away.
+
+**Q: How would a real trading system avoid that?**
+A: Dedicated, isolated CPU cores (Linux `isolcpus`, pinning with `taskset`, real-time scheduling),
+no other work on those cores, and busy-polling only on them. macOS has no hard core pinning.
+
+**Q: What mistakes did you make while measuring?**
+A: Two. I first ran all GC-on runs before all GC-off runs, and GC-off looked faster, but with
+zero collections in both it could not be GC; interleaving the runs removed the difference. And
+my first hiccup experiment ran the pipeline in a thread of the meter's process, so it measured
+GIL hand-offs (~6.3 ms, switch interval 5 ms), not the OS.

@@ -1,0 +1,183 @@
+{
+  "order_count": 300000,
+  "rate": 100000,
+  "runs_per_mode": 5,
+  "experiment_a_gc": {
+    "gc_on": {
+      "runs": [
+        {
+          "latency_p50_us": 0.708,
+          "latency_p99_us": 5.375,
+          "latency_p999_us": 155.333,
+          "latency_max_us": 8683.083,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ],
+          "gc_max_pause_us": 0.0
+        },
+        {
+          "latency_p50_us": 0.708,
+          "latency_p99_us": 3.5,
+          "latency_p999_us": 30.417,
+          "latency_max_us": 204.584,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ],
+          "gc_max_pause_us": 0.0
+        },
+        {
+          "latency_p50_us": 0.708,
+          "latency_p99_us": 1.208,
+          "latency_p999_us": 39.0,
+          "latency_max_us": 292.333,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ],
+          "gc_max_pause_us": 0.0
+        },
+        {
+          "latency_p50_us": 0.708,
+          "latency_p99_us": 1.542,
+          "latency_p999_us": 19.833,
+          "latency_max_us": 277.667,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ],
+          "gc_max_pause_us": 0.0
+        },
+        {
+          "latency_p50_us": 0.708,
+          "latency_p99_us": 2.209,
+          "latency_p999_us": 52.5,
+          "latency_max_us": 257.958,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ],
+          "gc_max_pause_us": 0.0
+        }
+      ],
+      "median_p99_us": 2.209,
+      "median_p999_us": 39.0,
+      "median_max_us": 277.667,
+      "total_gc_collections": [
+        0,
+        0,
+        0
+      ]
+    },
+    "gc_off": {
+      "runs": [
+        {
+          "latency_p50_us": 0.709,
+          "latency_p99_us": 5.583,
+          "latency_p999_us": 4025.875,
+          "latency_max_us": 4870.917,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ],
+          "gc_max_pause_us": 0.0
+        },
+        {
+          "latency_p50_us": 0.709,
+          "latency_p99_us": 1.334,
+          "latency_p999_us": 38.875,
+          "latency_max_us": 306.958,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ],
+          "gc_max_pause_us": 0.0
+        },
+        {
+          "latency_p50_us": 0.709,
+          "latency_p99_us": 1.083,
+          "latency_p999_us": 15.167,
+          "latency_max_us": 291.292,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ],
+          "gc_max_pause_us": 0.0
+        },
+        {
+          "latency_p50_us": 0.709,
+          "latency_p99_us": 3.0,
+          "latency_p999_us": 38.459,
+          "latency_max_us": 294.542,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ],
+          "gc_max_pause_us": 0.0
+        },
+        {
+          "latency_p50_us": 0.709,
+          "latency_p99_us": 633.209,
+          "latency_p999_us": 28748.208,
+          "latency_max_us": 31734.042,
+          "gc_collections": [
+            0,
+            0,
+            0
+          ],
+          "gc_max_pause_us": 0.0
+        }
+      ],
+      "median_p99_us": 3.0,
+      "median_p999_us": 38.875,
+      "median_max_us": 306.958,
+      "total_gc_collections": [
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "experiment_b_os_hiccups": {
+    "meter_alone": {
+      "seconds": 5.0,
+      "loop_iterations": 60866964,
+      "gaps_over_10us": 1082,
+      "gaps_over_100us": 0,
+      "gaps_over_1000us": 0,
+      "largest_gaps_us": [
+        58.6,
+        53.7,
+        53.3,
+        50.5,
+        46.9
+      ]
+    },
+    "meter_while_pipeline_runs": {
+      "seconds": 5.0,
+      "loop_iterations": 56054957,
+      "gaps_over_10us": 3790,
+      "gaps_over_100us": 76,
+      "gaps_over_1000us": 23,
+      "largest_gaps_us": [
+        14834.6,
+        14416.7,
+        10027.6,
+        9679.0,
+        8462.7
+      ]
+    }
+  },
+  "python": "3.14.6",
+  "machine": "macOS-15.6.1-arm64-arm-64bit-Mach-O"
+}

@@ -26,7 +26,8 @@ Make the terminal wide (at least 70 columns) and tall (at least 22 lines) for th
 - Learning-grade, not real HFT (C++/FPGA territory).
 - The Cython speedup is against a deliberately simple reference book (note 09).
 - Tail latency at a paced 100k/s is not under control yet: p99 varies ~1-200 us, max spikes up to
-  ~18 ms. Week 3 is investigating it (note 12).
+  ~18 ms. Measured so far (note 12): not the GC (0 collections); consistent with macOS stopping
+  busy-spinning processes on a contended M1 (hiccup meter saw gaps up to ~15 ms).
 - Prices must fit 1..10,000 ticks; memory is fixed up front (note 08).
 - Websocket feed deferred (decision D16).
 
