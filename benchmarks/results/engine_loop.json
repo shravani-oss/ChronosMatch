@@ -1,0 +1,126 @@
+{
+  "experiment_a_engine_capacity": {
+    "python": {
+      "orders_per_sec_median": 2499913,
+      "orders_per_sec_runs": [
+        2499913,
+        2501852,
+        2487020
+      ]
+    },
+    "c": {
+      "orders_per_sec_median": 24651338,
+      "orders_per_sec_runs": [
+        24827295,
+        24651338,
+        24558108
+      ]
+    },
+    "speedup_c_vs_python": 9.86
+  },
+  "experiment_b_pipeline_100k": {
+    "python": {
+      "runs": [
+        {
+          "latency_p50_us": 0.709,
+          "latency_p99_us": 2.0,
+          "latency_p999_us": 19.833,
+          "latency_max_us": 476.5
+        },
+        {
+          "latency_p50_us": 0.708,
+          "latency_p99_us": 3.0,
+          "latency_p999_us": 26.5,
+          "latency_max_us": 263.083
+        },
+        {
+          "latency_p50_us": 0.708,
+          "latency_p99_us": 6.791,
+          "latency_p999_us": 50.209,
+          "latency_max_us": 537.5
+        },
+        {
+          "latency_p50_us": 0.709,
+          "latency_p99_us": 1.0,
+          "latency_p999_us": 15.25,
+          "latency_max_us": 271.667
+        },
+        {
+          "latency_p50_us": 0.708,
+          "latency_p99_us": 1.834,
+          "latency_p999_us": 18.417,
+          "latency_max_us": 248.833
+        }
+      ],
+      "median_p50_us": 0.708,
+      "median_p99_us": 2.0,
+      "median_p999_us": 19.833,
+      "median_max_us": 271.667
+    },
+    "c": {
+      "runs": [
+        {
+          "latency_p50_us": 0.5,
+          "latency_p99_us": 0.584,
+          "latency_p999_us": 10.041,
+          "latency_max_us": 309.708,
+          "loop_pauses": {
+            "gaps_over_50us": 3,
+            "gaps_over_1ms": 0,
+            "max_gap_us": 131.416
+          }
+        },
+        {
+          "latency_p50_us": 0.5,
+          "latency_p99_us": 0.625,
+          "latency_p999_us": 13.125,
+          "latency_max_us": 257.458,
+          "loop_pauses": {
+            "gaps_over_50us": 2,
+            "gaps_over_1ms": 0,
+            "max_gap_us": 59.125
+          }
+        },
+        {
+          "latency_p50_us": 0.5,
+          "latency_p99_us": 0.584,
+          "latency_p999_us": 14.333,
+          "latency_max_us": 220.666,
+          "loop_pauses": {
+            "gaps_over_50us": 1,
+            "gaps_over_1ms": 0,
+            "max_gap_us": 78.167
+          }
+        },
+        {
+          "latency_p50_us": 0.5,
+          "latency_p99_us": 0.583,
+          "latency_p999_us": 15.709,
+          "latency_max_us": 302.916,
+          "loop_pauses": {
+            "gaps_over_50us": 2,
+            "gaps_over_1ms": 0,
+            "max_gap_us": 65.917
+          }
+        },
+        {
+          "latency_p50_us": 0.5,
+          "latency_p99_us": 0.584,
+          "latency_p999_us": 12.833,
+          "latency_max_us": 409.0,
+          "loop_pauses": {
+            "gaps_over_50us": 6,
+            "gaps_over_1ms": 0,
+            "max_gap_us": 83.667
+          }
+        }
+      ],
+      "median_p50_us": 0.5,
+      "median_p99_us": 0.584,
+      "median_p999_us": 13.125,
+      "median_max_us": 302.916
+    }
+  },
+  "python": "3.14.6",
+  "machine": "macOS-15.6.1-arm64-arm-64bit-Mach-O"
+}

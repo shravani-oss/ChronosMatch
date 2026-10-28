@@ -39,6 +39,8 @@ class EngineResult:
     latency_max_us: float
     best_bid: int | None
     best_ask: int | None
+    loop: str = "c"
+    loop_pauses: dict | None = None  # C loop only: gaps between loop iterations (process paused)
 
     @property
     def orders_per_sec(self) -> float:
@@ -71,32 +73,25 @@ def _publish(
     )
 
 
-def run_engine(
+def _python_loop(
     ring: RingBuffer,
     book: CythonOrderBook,
     count: int,
-    timeout_s: float = _TIMEOUT_S,
-    telemetry: TelemetryBlock | None = None,
-) -> EngineResult:
-    """Pop and match exactly `count` orders; raise TimeoutError if they stop arriving.
-
-    With `telemetry`, a dashboard snapshot is published at most every TELEMETRY_INTERVAL_NS,
-    checked once every TELEMETRY_CHECK_EVERY orders so the per-order cost stays tiny.
-    """
+    latencies: array,
+    timeout_s: float,
+    publish,
+) -> tuple[int, int]:
+    """The Week 2 loop: Python pops a tuple per order and calls submit_raw. Kept for comparison."""
     pop = ring.try_pop_raw
     submit = book.submit_raw
     clock = time.perf_counter_ns
     buy_code = config.SIDE_CODE_BUY
-    latencies = array("q", bytes(8 * count))  # preallocated C int64 array, not a Python list
-
     processed = 0
     start = 0
     deadline = time.monotonic() + timeout_s
     check_every = config.TELEMETRY_CHECK_EVERY
     last_pub_ns = clock()
     last_pub_count = 0
-    if telemetry is not None:
-        _publish(telemetry, book, 0, count, latencies, 0, done=False)
     while processed < count:
         item = pop()
         if item is None:
@@ -109,13 +104,47 @@ def run_engine(
         submit(side_code == buy_code, order_id, price, quantity)
         latencies[processed] = clock() - entry_ns
         processed += 1
-        if telemetry is not None and processed % check_every == 0:
+        if publish is not None and processed % check_every == 0:
             now = clock()
             if now - last_pub_ns >= config.TELEMETRY_INTERVAL_NS:
-                rate = (processed - last_pub_count) * config.NS_PER_SEC // (now - last_pub_ns)
-                _publish(telemetry, book, processed, count, latencies, rate, done=False)
+                publish(processed, (processed - last_pub_count) * config.NS_PER_SEC // (now - last_pub_ns))
                 last_pub_ns, last_pub_count = now, processed
-    elapsed = clock() - start
+    return processed, clock() - start
+
+
+def run_engine(
+    ring: RingBuffer,
+    book: CythonOrderBook,
+    count: int,
+    timeout_s: float = _TIMEOUT_S,
+    telemetry: TelemetryBlock | None = None,
+    loop: str = "c",
+) -> EngineResult:
+    """Pop and match exactly `count` orders; raise TimeoutError if they stop arriving.
+
+    loop="c" (default) runs the whole loop inside Cython (`consume_ring`): no Python object per
+    order, plus the loop's own pause statistics. loop="python" is the Week 2 loop, kept so the two
+    can be compared. With `telemetry`, a dashboard snapshot is published about every 100 ms.
+    """
+    if loop not in ("c", "python"):
+        raise ValueError(f"loop must be 'c' or 'python', got {loop!r}")
+    latencies = array("q", bytes(8 * count))  # preallocated C int64 array, not a Python list
+    publish = None
+    if telemetry is not None:
+        _publish(telemetry, book, 0, count, latencies, 0, done=False)
+        publish = lambda done, rate: _publish(telemetry, book, done, count, latencies, rate, done=False)  # noqa: E731
+
+    pauses: dict | None = None
+    if loop == "c":
+        processed, elapsed, over_50us, over_1ms, max_gap = book.consume_ring(
+            ring, count, latencies, timeout_s, publish,
+            config.TELEMETRY_CHECK_EVERY, config.TELEMETRY_INTERVAL_NS,
+        )
+        pauses = {"gaps_over_50us": over_50us, "gaps_over_1ms": over_1ms,
+                  "max_gap_us": round(max_gap / 1_000, 3)}
+    else:
+        processed, elapsed = _python_loop(ring, book, count, latencies, timeout_s, publish)
+
     if telemetry is not None:
         overall = processed * config.NS_PER_SEC // elapsed if elapsed else 0
         _publish(telemetry, book, processed, count, latencies, overall, done=True)
@@ -132,6 +161,8 @@ def run_engine(
         latency_max_us=round(ordered[-1] / 1_000, 3) if count else 0.0,
         best_bid=book.best_bid,
         best_ask=book.best_ask,
+        loop=loop,
+        loop_pauses=pauses,
     )
 
 
@@ -145,6 +176,10 @@ def main(argv: list[str] | None = None) -> int:
         "--gc", choices=("on", "off"), default="on",
         help="off = freeze existing objects and disable the cyclic GC for the run (experiment)",
     )
+    parser.add_argument(
+        "--loop", choices=("c", "python"), default="c",
+        help="c = engine loop inside Cython (default); python = the Week 2 Python loop",
+    )
     args = parser.parse_args(argv)
     if args.forbid_pickle:
         forbid_pickle()
@@ -155,7 +190,7 @@ def main(argv: list[str] | None = None) -> int:
     telemetry = TelemetryBlock.attach(args.telemetry) if args.telemetry else None
     try:
         with RingBuffer.attach(args.ring) as ring, GcMonitor() as gc_mon:
-            result = run_engine(ring, CythonOrderBook(), args.count, telemetry=telemetry)
+            result = run_engine(ring, CythonOrderBook(), args.count, telemetry=telemetry, loop=args.loop)
     finally:
         if telemetry is not None:
             telemetry.close()

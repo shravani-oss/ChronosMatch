@@ -34,7 +34,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python setup.py build_ext --inplace   # compile the Cython modules (rerun after editing .pyx)
-pytest                                # 210 tests
+pytest                                # 222 tests
 ```
 
 ## Demos
@@ -70,7 +70,8 @@ caveats in `docs/notes/`.
 | asyncio firehose, unlimited / at 100k target | 831k / 99,979 orders/sec | 06 |
 | Reference order book (pure Python) | 12.7k orders/sec, p50 77.8 us | 02, 09 |
 | Cython book `submit` / `submit_raw` | 2.7M / 15.9M orders/sec | 09 |
-| Full pipeline, 1M orders, unlimited | 825k orders/sec, p50 0.75 us, p99 0.88 us | 10 |
+| Engine loop draining the ring: Python / C (`consume_ring`) | 2.5M / **24.7M** orders/sec | 13 |
+| Full pipeline, 1M orders, unlimited | 819k orders/sec, p50 0.50 us, p99 0.58 us | 10, 13 |
 
 Reproduce: `python benchmarks/bench_ipc.py` (also `bench_serialization`, `bench_firehose`,
 `bench_reference_book`, `bench_order_books`). Raw results in `benchmarks/results/`.
@@ -101,5 +102,7 @@ learning/           small toy scripts used while learning
 
 ## Status
 Weeks 1-2 complete (ring buffer, firehose, Cython order book, pipeline, dashboard).
-Next: Week 3 (remove Python objects from the hot loop, GC control, tail latency),
+Week 3 in progress: engine loop moved into C (no per-order Python objects), GC ruled out,
+tail-latency investigation ongoing (notes 12, 13).
+Next:
 Week 4 (SQLite trade ledger, whale-order highlighting).

@@ -141,4 +141,10 @@ Each entry: decision, alternatives, reason.
   are not safe. Release/acquire is the minimal, lock-free ordering an SPSC ring needs; a lock or
   a syscall per order would cost far more. Measured cost: none (1.69M vs 1.66M orders/sec).
 
+## D26: Engine loop runs inside Cython by default; Python loop kept as `--loop python`
+- Alternatives: keep the Python loop (Week 2); write the loop in a separate C file.
+- Reason: measured 9.9x engine capacity (24.7M vs 2.5M orders/s) and lower typical latency
+  (p99 0.58 vs 2.0 us at 100k/s) with identical trades. Keeping the old loop behind a flag lets
+  every claim be re-measured side by side. Keeping it in the same .pyx reuses `_match` directly.
+
 ## Open decisions (to be made at design time)

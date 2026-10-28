@@ -190,3 +190,20 @@ A: Two. I first ran all GC-on runs before all GC-off runs, and GC-off looked fas
 zero collections in both it could not be GC; interleaving the runs removed the difference. And
 my first hiccup experiment ran the pipeline in a thread of the meter's process, so it measured
 GIL hand-offs (~6.3 ms, switch interval 5 ms), not the OS.
+
+**Q: What did moving the engine loop into Cython change?**
+A: The loop now copies each 32-byte record out of shared memory as a C struct and calls the C
+matcher directly, so no Python object is created per order. Engine capacity went from 2.5M to
+24.7M orders/s (9.9x) and p99 latency at 100k/s from 2.0 us to 0.58 us, with identical trades.
+
+**Q: Did it fix your worst-case latency?**
+A: No, and measuring why was useful. The C loop records its own pauses; in every run the engine's
+longest pause (under 131 us) was far shorter than the slowest order (up to 409 us), so the engine
+being descheduled is not the cause. My current hypothesis is the producer: it timestamps an
+order before publishing it, so if the OS pauses the firehose in between, that order looks slow.
+That is the next thing I measure.
+
+**Q: How do you make sure C and Python timestamps are comparable?**
+A: Both must read the same clock. On macOS `time.perf_counter_ns` uses `mach_absolute_time`;
+the C loop calls the same function with the same tick-to-ns formula, and a test checks the C
+value always falls between two Python readings.

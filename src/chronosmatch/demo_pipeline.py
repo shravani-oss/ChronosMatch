@@ -141,6 +141,12 @@ def main(argv: list[str] | None = None) -> int:
         gc_info = e["gc"]
         print(f"  gc        : mode={e['gc_mode']} collections(gen0,1,2)={gc_info['collections']} "
               f"total pause={gc_info['total_pause_us']} us max pause={gc_info['max_pause_us']} us")
+        if e["loop_pauses"] is not None:
+            lp = e["loop_pauses"]
+            print(f"  loop      : {e['loop']}  paused >50us={lp['gaps_over_50us']} "
+                  f">1ms={lp['gaps_over_1ms']} longest={lp['max_gap_us']} us")
+        else:
+            print(f"  loop      : {e['loop']}")
         print(f"  trades    : engine    {tuple(e['trade_stats'])}")
     print(f"  trades    : expected  {r.expected_stats}")
     if r.reference_stats is not None:

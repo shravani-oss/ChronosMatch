@@ -146,6 +146,17 @@
 - Caught two flaws in my own experiments (run-order confound; GIL artefact from using a thread).
 - Suite: 210 passing.
 
+## 2026-10-28
+- Week 3 goal done: engine loop moved into Cython (`consume_ring`): records read from shared
+  memory as C structs, no Python object per order; same clock as perf_counter_ns (tested).
+  `--loop python` kept for comparison. 12 new tests.
+- Engine capacity 24.7M orders/s (C) vs 2.5M (Python), 9.9x; pipeline at 100k/s p50 0.50 us,
+  p99 0.58 us (vs 0.71 / 2.0).
+- Finding: the engine's own longest pause (59-131 us) is far shorter than the max latency
+  (221-409 us), so engine preemption does not explain the worst spikes. New hypothesis: firehose
+  paused between stamping and publishing an order (to measure next).
+- Suite: 222 passing; review check 6/6 PASS.
+
 ## Learning debt (must be taught and walked through line by line before the mid review)
 - [ ] Part B check questions (time priority, partial fill, why arrival time matters)
 - [ ] Latency, processes vs threads, the GIL
@@ -166,4 +177,5 @@
 - [ ] Seqlock and the dashboard design (note 11)
 - [ ] GC: refcounting vs cyclic GC, thresholds, why the engine never collects (note 12)
 - [ ] Tail latency, OS scheduling, the hiccup meter, experiment design pitfalls (note 12)
+- [ ] consume_ring: C structs over shared memory, same-clock latency, loop pause meter (note 13)
 - [ ] multiprocessing spawn -> ipc_demo.py and the two-process test walkthrough

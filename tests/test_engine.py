@@ -45,3 +45,20 @@ def test_engine_times_out_when_orders_stop_arriving(tmp_path: Path) -> None:
             ring.try_push(o, time.perf_counter_ns())
         with pytest.raises(TimeoutError, match="10 of 20"):
             run_engine(ring, CythonOrderBook(), 20, timeout_s=0.2)
+
+
+@pytest.mark.parametrize("loop", ["c", "python"])
+def test_both_loops_give_identical_results(tmp_path: Path, loop: str) -> None:
+    with RingBuffer.create(tmp_path / f"{loop}.ring", 4096) as ring:
+        for o in generate_orders(COUNT, seed=8):
+            ring.try_push(o, time.perf_counter_ns())
+        result = run_engine(ring, CythonOrderBook(), COUNT, loop=loop)
+    assert result.trade_stats == direct_stats(COUNT, 8)
+    assert result.loop == loop
+    assert (result.loop_pauses is not None) == (loop == "c")
+
+
+def test_unknown_loop_rejected(tmp_path: Path) -> None:
+    with RingBuffer.create(tmp_path / "x.ring", 8) as ring:
+        with pytest.raises(ValueError, match="loop"):
+            run_engine(ring, CythonOrderBook(), 0, loop="rust")
