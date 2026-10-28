@@ -87,6 +87,11 @@ class RingBuffer:
     def capacity(self) -> int:
         return self._capacity
 
+    @property
+    def buffer(self) -> mmap.mmap:
+        """The underlying mmap, for the Cython engine loop that reads slots directly."""
+        return self._mm
+
     def __len__(self) -> int:
         return max(0, self._write_index.load() - self._read_index.load())
 

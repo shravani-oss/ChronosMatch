@@ -6,13 +6,47 @@ nodes linked into one FIFO queue per price level. The cdef core methods work onl
 
 Matching: `submit` (Python objects in/out) and `submit_raw` (C integers only) share the cdef
 `_match` core, which writes trades into a preallocated C trade buffer.
+
+`consume_ring` (Week 3) runs the whole engine loop in C: it reads 32-byte order records straight
+out of the shared-memory ring as C structs and matches them, creating no Python objects per order.
 """
 
-from libc.stdint cimport int32_t, int64_t, uint64_t
+from libc.stdint cimport int32_t, int64_t, uint8_t, uint32_t, uint64_t
 from libc.stdlib cimport free, malloc
 
 from chronosmatch import config
 from chronosmatch.types import Side, Trade
+
+cdef extern from *:
+    """
+    #include <stdint.h>
+    #ifdef __APPLE__
+    #include <mach/mach_time.h>
+    /* Same clock and tick->ns conversion as CPython's time.perf_counter_ns() on macOS. */
+    static inline int64_t cm_now_ns(void) {
+        static mach_timebase_info_data_t tb = {0, 0};
+        if (tb.denom == 0) mach_timebase_info(&tb);
+        uint64_t t = mach_absolute_time();
+        return (int64_t)((t / tb.denom) * tb.numer + (t % tb.denom) * tb.numer / tb.denom);
+    }
+    #else
+    #include <time.h>
+    static inline int64_t cm_now_ns(void) {
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        return (int64_t)ts.tv_sec * 1000000000LL + ts.tv_nsec;
+    }
+    #endif
+    static inline uint64_t cm_load_acquire_u64(const uint64_t *p) {
+        return __atomic_load_n(p, __ATOMIC_ACQUIRE);
+    }
+    static inline void cm_store_release_u64(uint64_t *p, uint64_t v) {
+        __atomic_store_n(p, v, __ATOMIC_RELEASE);
+    }
+    """
+    int64_t cm_now_ns() nogil
+    uint64_t cm_load_acquire_u64(const uint64_t *p) nogil
+    void cm_store_release_u64(uint64_t *p, uint64_t v) nogil
 
 cdef int32_t NO_NODE = -1
 # FNV-1a 64-bit constants (see trade_digest.py for the identical Python version).
@@ -25,6 +59,25 @@ cdef struct Node:
     int64_t price
     int64_t remaining
     int32_t next          # next node in the same price level (FIFO), or NO_NODE
+
+
+# Must match config.ORDER_RECORD_FORMAT "<QQqIB3x" (little-endian CPU, natural alignment = 32 bytes).
+cdef struct OrderRecord:
+    uint64_t order_id
+    uint64_t timestamp_ns
+    int64_t price
+    uint32_t quantity
+    uint8_t side
+    uint8_t pad[3]
+
+
+def now_ns():
+    """The C loop's clock (exposed so tests can compare it with time.perf_counter_ns)."""
+    return cm_now_ns()
+
+
+def order_record_size():
+    return sizeof(OrderRecord)
 
 
 cdef struct TradeRec:
@@ -256,6 +309,106 @@ cdef class CythonOrderBook:
             )
             for i in range(n)
         ]
+
+    def consume_ring(
+        self,
+        ring,
+        int64_t count,
+        int64_t[::1] latencies,
+        double timeout_s,
+        publish=None,
+        int64_t publish_check_every=1024,
+        int64_t publish_interval_ns=100_000_000,
+    ):
+        """Engine loop in C: pop `count` orders from `ring` (a RingBuffer) and match each one.
+
+        Per order: acquire-load the write index, copy the 32-byte record out of shared memory as a C
+        struct, release-store the read index (slot is free), validate, `_match`, and store
+        latency = now - entry timestamp into `latencies`. No Python object is created per order.
+
+        Also measures the loop's own pauses: the gap between consecutive loop iterations. A busy
+        loop iterates every few tens of ns, so a long gap means this process was not running.
+
+        `publish(processed, orders_per_sec)` (optional) is called at most every
+        `publish_interval_ns`, checked every `publish_check_every` orders; its time is excluded
+        from the gap measurement.
+
+        Returns (processed, elapsed_ns, gaps_over_50us, gaps_over_1ms, max_gap_ns).
+        """
+        if latencies.shape[0] < count:
+            raise ValueError("latencies buffer is shorter than count")
+        if ring.capacity & (ring.capacity - 1):
+            raise ValueError("ring capacity must be a power of two")
+        if sizeof(OrderRecord) != config.ORDER_RECORD_SIZE:
+            raise RuntimeError("OrderRecord layout does not match config.ORDER_RECORD_SIZE")
+
+        cdef unsigned char[::1] mem = ring.buffer
+        cdef unsigned char* base = &mem[0]
+        cdef uint64_t* write_idx = <uint64_t*> (base + <Py_ssize_t> config.RING_WRITE_INDEX_OFFSET)
+        cdef uint64_t* read_idx = <uint64_t*> (base + <Py_ssize_t> config.RING_READ_INDEX_OFFSET)
+        cdef OrderRecord* slots = <OrderRecord*> (base + <Py_ssize_t> config.RING_HEADER_SIZE)
+        cdef uint64_t mask = ring.capacity - 1
+        cdef uint8_t side_buy = config.SIDE_CODE_BUY
+        cdef uint8_t side_sell = config.SIDE_CODE_SELL
+
+        cdef uint64_t read = cm_load_acquire_u64(read_idx)
+        cdef uint64_t write = cm_load_acquire_u64(write_idx)
+        cdef OrderRecord rec
+        cdef int64_t processed = 0
+        cdef int64_t now
+        cdef int64_t prev = cm_now_ns()
+        cdef int64_t start = 0
+        cdef int64_t gap
+        cdef int64_t max_gap = 0
+        cdef int64_t gaps_50us = 0
+        cdef int64_t gaps_1ms = 0
+        cdef int64_t deadline = prev + <int64_t> (timeout_s * 1e9)
+        cdef int64_t last_pub_ns = prev
+        cdef int64_t last_pub_count = 0
+
+        while processed < count:
+            now = cm_now_ns()
+            gap = now - prev
+            prev = now
+            if gap > max_gap:
+                max_gap = gap
+            if gap > 50_000:
+                gaps_50us += 1
+                if gap > 1_000_000:
+                    gaps_1ms += 1
+
+            if read == write:
+                write = cm_load_acquire_u64(write_idx)  # acquire: the records it covers are visible
+                if read == write:
+                    if now > deadline:
+                        raise TimeoutError(f"engine received {processed} of {count} orders")
+                    continue
+
+            rec = slots[read & mask]                   # copy the record out of shared memory
+            read += 1
+            cm_store_release_u64(read_idx, read)       # release: our copy finished, slot is free
+
+            if ((rec.side != side_buy and rec.side != side_sell) or rec.price < 1
+                    or rec.price > self.max_price or rec.quantity == 0):
+                raise ValueError(f"corrupt order record at index {read - 1}")
+            if self.free_top == 0:
+                raise OverflowError("order book node pool is full; order rejected")
+            if processed == 0:
+                start = cm_now_ns()
+
+            self._match(rec.side == side_buy, <int64_t> rec.order_id, rec.price, rec.quantity)
+            now = cm_now_ns()
+            latencies[processed] = now - <int64_t> rec.timestamp_ns
+            processed += 1
+
+            if publish is not None and processed % publish_check_every == 0:
+                if now - last_pub_ns >= publish_interval_ns:
+                    publish(processed, (processed - last_pub_count) * 1_000_000_000 // (now - last_pub_ns))
+                    last_pub_count = processed
+                    last_pub_ns = cm_now_ns()
+                    prev = last_pub_ns                 # do not count our own publish as a pause
+
+        return (processed, cm_now_ns() - start, gaps_50us, gaps_1ms, max_gap)
 
     def submit_raw(self, bint is_buy, int64_t order_id, int64_t price, int64_t quantity):
         """Same as submit, but takes C integers and returns only the trade count.
