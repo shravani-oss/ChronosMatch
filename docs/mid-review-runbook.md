@@ -1,13 +1,13 @@
-# Mid-Review Runbook (27-30 Oct)
+# Review Runbook (mid review 27-30 Oct, final review 5-10 Nov)
 
 ## 15 minutes before
 ```bash
 cd ~/Documents/Chronos-match
 source .venv/bin/activate
 python setup.py build_ext --inplace     # make sure the Cython modules match the source
-python scripts/review_check.py          # all 6 checks must say PASS (~1 minute)
+python scripts/review_check.py          # all 7 checks must say PASS (~1 minute)
 ```
-Last full run (27 Oct): 6/6 PASS. If anything fails, run that one command by hand (listed in
+Last full run (3 Nov): 7/7 PASS. If anything fails, run that one command by hand (listed in
 `scripts/review_check.py`) and read its output; do not demo a failing proof.
 
 Make the terminal wide (at least 70 columns) and tall (at least 22 lines) for the dashboard.
@@ -20,7 +20,9 @@ Make the terminal wide (at least 70 columns) and tall (at least 22 lines) for th
 | 3 | Proof (a) | `PYTHONPATH=src python -m chronosmatch.demo_ipc` | 1M orders across two processes; pickle raises in both; every order checked; PASS. |
 | 4 | Proof (b) | `pytest tests/test_differential.py -v` | Cython book vs simple reference book on 108k random orders, identical after every order. A planted bug made 36/36 fail. |
 | 5 | Both together | `PYTHONPATH=src python -m chronosmatch.demo_pipeline` | Engine's trade fingerprint equals an independent run; ~800k orders/s end to end; p50 ~0.75 us. |
-| 6 | Numbers | README Results table | Ring 12x faster than pickling queue; Cython book 15.9M orders/s raw. State the caveats. |
+| 6 | Ledger (Week 4) | `PYTHONPATH=src python -m chronosmatch.demo_pipeline --ledger trades.sqlite` then `sqlite3 trades.sqlite "SELECT COUNT(*) FROM trades"` | Every trade stored by a background process, verified by reading it back. Low priority (nice 15) kept the engine's tail at p99.9 7 us. |
+| 7 | Whales (Week 4) | The live dashboard (step 2) | Large orders that clear several levels flash NEW WHALE; definition chosen from measured data (note 16). |
+| 8 | Numbers | README Results table | Ring 12x faster than pickling queue; Cython book 15.9M orders/s raw. State the caveats. |
 
 ## Say these limitations before you are asked
 - Learning-grade, not real HFT (C++/FPGA territory).

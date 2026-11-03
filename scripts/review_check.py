@@ -31,6 +31,8 @@ def checks(quick: bool) -> list[tuple[str, list[str]]]:
          [py, "-m", "chronosmatch.demo_pipeline", "--count", count]),
         (f"Pipeline checked against the reference book ({int(ref_count):,} orders)",
          [py, "-m", "chronosmatch.demo_pipeline", "--count", ref_count, "--reference"]),
+        (f"Pipeline + SQLite ledger: {int(count):,} orders, every trade stored and read back",
+         [py, "-m", "chronosmatch.demo_pipeline", "--count", count, "--ledger", str(ROOT / "benchmarks" / "results" / "review_trades.sqlite")]),
         ("Dashboard, headless (50,000 orders)",
          [py, "-m", "chronosmatch.live", "--headless", "--count", "50000", "--rate", "0"]),
     ]

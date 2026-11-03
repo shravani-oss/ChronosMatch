@@ -4,8 +4,9 @@ A learning-grade, zero-copy limit order book matching engine in Python + Cython.
 
 A Python **firehose** process writes orders as raw 32-byte records into a **memory-mapped ring
 buffer**. A separate **Cython matching engine** process reads the same memory, with no pickle or
-JSON on the data path, and matches orders with price-time priority. A **curses dashboard**
-shows the live top of book and latency in microseconds.
+JSON on the data path, and matches orders with price-time priority in a C loop. Every trade
+goes through a second ring to a background **SQLite ledger** process. A **curses dashboard**
+shows the live top of book, latency in microseconds, and highlights "whale" orders.
 
 > Honest scope: real HFT systems use C++ or FPGAs. This project demonstrates the techniques
 > (zero-copy IPC, lock-free SPSC ring, C data structures, measured latency) and states its
@@ -16,15 +17,16 @@ shows the live top of book and latency in microseconds.
 ```
  firehose process              shared memory                engine process
 +-------------------+     +-----------------------+     +------------------------+
-| asyncio, 100k/s   | --> | SPSC ring buffer      | --> | Cython order book      |
+| asyncio, 100k/s   | --> | order ring (SPSC)     | --> | C loop + Cython book   |
 | stamps entry time |     | mmap, 32-byte records |     | price-indexed arrays,  |
 +-------------------+     | acquire/release index |     | FIFO per price level   |
-                          +-----------------------+     +-----------+------------+
-                                                                    | ~10x per second
-                          +-----------------------+                 v
- dashboard process  <---- | telemetry block       | <---------------+
- (curses)                 | mmap, seqlock         |
-                          +-----------------------+
+                          +-----------------------+     +-----+------------+-----+
+                                                              |            | ~10x per second
+                          +-----------------------+           |            v
+ ledger process     <---- | trade ring (SPSC)     | <---------+   +-----------------+
+ (SQLite, nice 15)        | mmap, 32-byte records |               | telemetry block | --> dashboard
+                          +-----------------------+               | mmap, seqlock   |     (curses)
+                                                                  +-----------------+
 ```
 
 ## Setup (macOS)
@@ -34,7 +36,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python setup.py build_ext --inplace   # compile the Cython modules (rerun after editing .pyx)
-pytest                                # 222 tests
+pytest                                # 245 tests
 ```
 
 ## Demos
@@ -42,7 +44,8 @@ All commands from the repo root with the venv active.
 
 | Command | What it shows |
 |---|---|
-| `PYTHONPATH=src python -m chronosmatch.live` | Live dashboard: 2M orders at 100k/s through the full pipeline (q quits) |
+| `PYTHONPATH=src python -m chronosmatch.live` | Live dashboard: 2M orders at 100k/s, whale highlighting (q quits) |
+| `PYTHONPATH=src python -m chronosmatch.demo_pipeline --ledger trades.sqlite` | Pipeline + SQLite ledger: every trade stored, fingerprint read back from SQLite |
 | `PYTHONPATH=src python -m chronosmatch.demo_pipeline` | Full pipeline, 1M orders, engine's trades verified, PASS/FAIL |
 | `PYTHONPATH=src python -m chronosmatch.demo_pipeline --count 200000 --reference` | Same, also checked against the pure-Python reference book |
 | `PYTHONPATH=src python -m chronosmatch.demo_ipc` | 1M orders between two processes, pickle disabled, every order checked |
@@ -72,23 +75,28 @@ caveats in `docs/notes/`.
 | Cython book `submit` / `submit_raw` | 2.7M / 15.9M orders/sec | 09 |
 | Engine loop draining the ring: Python / C (`consume_ring`) | 2.5M / **24.7M** orders/sec | 13 |
 | Full pipeline, 1M orders, unlimited | 819k orders/sec, p50 0.50 us, p99 0.58 us | 10, 13 |
+| Pipeline at 100k/s with ledger (nice 15), 300k orders | p50 0.54 us, p99 0.58 us, max 35 us | 15 |
+| SQLite ledger, 1M orders unlimited | 810,698 trades stored at ~603k/s, engine never waited | 15 |
 
 Reproduce: `python benchmarks/bench_ipc.py` (also `bench_serialization`, `bench_firehose`,
 `bench_reference_book`, `bench_order_books`). Raw results in `benchmarks/results/`.
 
 **Caveats:** the Cython speedup is against our deliberately simple reference book, not an
 optimised pure-Python book (note 09). Sub-microsecond latencies are limited by the ~42 ns
-timer resolution. Tail latency at a paced 100k/s is not yet under control (p99 varies from
-~1 us to ~200 us between runs, max spikes up to ~18 ms). Investigation so far (note 12): not
-garbage collection (0 collections during engine runs); consistent with the OS stopping
-busy-spinning processes on a contended 4-performance-core M1 (a hiccup meter saw gaps up to
-~15 ms).
+timer resolution. Tail latency (notes 12-15): garbage collection ruled out (0 collections);
+Python objects removed from the engine loop; a sparse-file stall fixed; a normal-priority ledger
+hurt the tail, `nice 15` fixed it. What remains is the OS occasionally pausing a process on a
+busy 4-performance-core laptop (up to several ms in noisy runs); production systems avoid this
+with isolated CPU cores, which macOS does not offer.
 
 ## Bugs found along the way
 - **Stale reads on ARM (fixed 26 Oct):** without acquire/release ordering, the ring's consumer
   occasionally (~1 per million orders) read a slot's previous contents. Found because identical
   runs gave different trade counts; fixed with C atomics; 0 stale reads in 6M checked orders
   afterwards. Note 04.
+- **Producer stalls on a sparse ring file (fixed 3 Nov):** the first write into each new 128 KB
+  chunk of the ring file stalled the producer ~200 us, because the file was created sparse.
+  Preallocating it: 0 of 48 boundary crossings stalled, vs 22 of 48 before. Note 14.
 
 ## Layout
 ```
@@ -101,8 +109,8 @@ learning/           small toy scripts used while learning
 ```
 
 ## Status
-Weeks 1-2 complete (ring buffer, firehose, Cython order book, pipeline, dashboard).
-Week 3 in progress: engine loop moved into C (no per-order Python objects), GC ruled out,
-tail-latency investigation ongoing (notes 12, 13).
-Next:
-Week 4 (SQLite trade ledger, whale-order highlighting).
+- Weeks 1-2: ring buffer, firehose, Cython order book, pipeline, dashboard (complete).
+- Week 3: engine loop in C with no per-order Python objects; GC ruled out; tail-latency causes
+  found and fixed where possible (notes 12-14) (complete).
+- Week 4: SQLite trade ledger (note 15) and whale-order highlighting (note 16) done; final demo
+  rehearsal, project report and slides in progress.

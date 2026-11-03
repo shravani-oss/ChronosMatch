@@ -216,3 +216,35 @@ delay. The slow orders were all at positions 4,096k - 5, which map to the first 
 while the producer waited ~200 us. Preallocating the file took those stalls from 22 of 48
 boundary crossings to 0. Two earlier guesses (page faults in general, CPU contention at start-up)
 were tested and rejected first.
+
+## Week 4: SQLite ledger and whales
+
+**Q: How do trades get into SQLite without slowing matching?**
+A: The engine's C loop copies each trade as a 32-byte record into a second shared-memory ring and
+publishes it with a release store. A separate ledger process drains that ring in batches of up to
+10,000 and writes one SQLite transaction per batch. The database work never runs in the engine.
+If the ledger falls behind, the engine waits instead of dropping trades. On 1M orders it stored
+all 810,698 trades and the engine never had to wait.
+
+**Q: How do you know the database is complete and correct?**
+A: After the run the ledger reads every row back in order and computes the same fingerprint as
+the engine (count, quantity, notional, 64-bit checksum). They must be equal; a test shows a
+mismatch makes the demo fail.
+
+**Q: Did adding the ledger cost anything?**
+A: At normal priority, yes: the engine's p99.9 went from 7.8 us to 423 us, because the ledger's
+SQLite bursts competed for the M1's 4 performance cores. Running the ledger at low priority
+(`nice 15`) brought p99.9 back to 7.1 us and the max to 35 us, with the engine still never
+waiting. Background work should tell the OS it is background work.
+
+**Q: How do you define a whale?**
+A: An order that fills at least 500 shares across at least 3 price levels. I first used levels
+alone, but measured 17,481 "whales" in 1M ordinary orders, because levels near the mid are thin.
+With size and levels together, ordinary flow gives 0 and the injected large orders that really
+sweep the book are caught. It is detected inside the C matching loop at no extra cost.
+
+**Q: Tell me about a performance bug you found by measuring.** (alternative to the ARM bug)
+A: Worst-case latency spikes of ~250-300 us always hit orders at positions 4,096k - 5, which map
+to the first byte of each 128 KB chunk of the ring file. The file was sparse, so macOS allocated
+each chunk on first write while the producer waited. Preallocating the file removed them
+(0 of 48 chunk boundaries stalled, vs 22 of 48).

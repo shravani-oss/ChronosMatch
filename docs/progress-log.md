@@ -157,6 +157,22 @@
   paused between stamping and publishing an order (to measure next).
 - Suite: 222 passing; review check 6/6 PASS.
 
+## 2026-10-29 to 2026-11-02
+- No work and no commits on these days.
+
+## 2026-11-03
+- Tested the 28 Oct hypothesis: in 4 of 5 runs the engine's slowest order was the same order as
+  the firehose's slowest publish (same delay to ~1 us). The slow orders sat on 128 KB boundaries
+  of the ring file: the file was sparse. Preallocating it: 0 of 48 boundary crossings stalled vs
+  22 of 48 (note 14). Two wrong guesses tested and rejected on the way.
+- Week 4: SQLite trade ledger (trade ring + background ledger process, batched transactions,
+  fingerprint read back from SQLite). 1M orders: 810,698 trades stored, engine never waited.
+  Ledger at normal priority hurt the engine's tail (p99.9 423 us); at nice 15, p99.9 7.1 us and
+  max 35 us (note 15).
+- Week 4: whale detection in the C matching core and dashboard highlighting. Definition changed
+  after measuring: levels alone flagged 17,481 ordinary orders; size + levels gives 0 (note 16).
+- Review check now 7 checks (ledger added): 7/7 PASS. Suite: 245 passing.
+
 ## Learning debt (must be taught and walked through line by line before the mid review)
 - [ ] Part B check questions (time priority, partial fill, why arrival time matters)
 - [ ] Latency, processes vs threads, the GIL
@@ -178,4 +194,7 @@
 - [ ] GC: refcounting vs cyclic GC, thresholds, why the engine never collects (note 12)
 - [ ] Tail latency, OS scheduling, the hiccup meter, experiment design pitfalls (note 12)
 - [ ] consume_ring: C structs over shared memory, same-clock latency, loop pause meter (note 13)
+- [ ] Sparse files and page allocation; the producer-stall investigation (note 14)
+- [ ] Trade ring, ledger, SQLite batching/WAL, nice (note 15)
+- [ ] Whale definition and why data changed it (note 16)
 - [ ] multiprocessing spawn -> ipc_demo.py and the two-process test walkthrough

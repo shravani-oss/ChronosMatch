@@ -15,3 +15,8 @@ venv/
 # Local assistant instructions (not part of the project)
 CLAUDE.md
 .claude/
+
+# Ledger databases produced by demos
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
