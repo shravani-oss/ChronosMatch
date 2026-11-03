@@ -27,6 +27,12 @@ class FirehoseStats:
     sent: int
     full_waits: int  # times the ring was full and we had to wait (backpressure)
     elapsed_ns: int
+    # Time from taking an order's entry timestamp to its index being published. Normally well
+    # under a microsecond; a long one means this process was paused mid-publish, and that delay
+    # is counted in the order's end-to-end latency.
+    max_publish_ns: int = 0
+    slowest_publish_order_id: int = 0
+    publishes_over_50us: int = 0
 
     @property
     def orders_per_sec(self) -> float:
@@ -45,13 +51,25 @@ async def run_firehose(
     if batch_size <= 0:
         raise ValueError(f"batch_size must be positive, got {batch_size}")
 
+    clock = time.perf_counter_ns
     sent = 0
     full_waits = 0
-    start = time.perf_counter_ns()
+    max_publish = 0
+    slowest_id = 0
+    slow_publishes = 0
+    start = clock()
     for order in orders:
-        while not ring.try_push(order, time.perf_counter_ns()):
+        while True:
+            stamp = clock()
+            if ring.try_push(order, stamp):
+                break
             full_waits += 1
             await asyncio.sleep(0)  # ring full: let other tasks (e.g. a consumer) run
+        publish_ns = clock() - stamp
+        if publish_ns > max_publish:
+            max_publish, slowest_id = publish_ns, order.order_id
+        if publish_ns > 50_000:
+            slow_publishes += 1
         sent += 1
 
         if sent % batch_size == 0:
@@ -61,7 +79,7 @@ async def run_firehose(
                 delay_s = (due_ns - time.perf_counter_ns()) / config.NS_PER_SEC
             await asyncio.sleep(max(0.0, delay_s))  # ahead of schedule: wait; else just yield
 
-    return FirehoseStats(sent, full_waits, time.perf_counter_ns() - start)
+    return FirehoseStats(sent, full_waits, clock() - start, max_publish, slowest_id, slow_publishes)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -86,7 +104,10 @@ def main(argv: list[str] | None = None) -> None:
         )
     print(
         f"sent={stats.sent} elapsed_ms={stats.elapsed_ns / 1e6:.1f} "
-        f"rate={stats.orders_per_sec:,.0f}/s full_waits={stats.full_waits}"
+        f"rate={stats.orders_per_sec:,.0f}/s full_waits={stats.full_waits} "
+        f"max_publish_us={stats.max_publish_ns / 1_000:.1f} "
+        f"slowest_publish_id={stats.slowest_publish_order_id} "
+        f"publishes_over_50us={stats.publishes_over_50us}"
     )
 
 

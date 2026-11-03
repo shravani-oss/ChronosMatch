@@ -147,4 +147,10 @@ Each entry: decision, alternatives, reason.
   (p99 0.58 vs 2.0 us at 100k/s) with identical trades. Keeping the old loop behind a flag lets
   every claim be re-measured side by side. Keeping it in the same .pyx reuses `_match` directly.
 
+## D27: Create shared-memory files fully allocated and pre-touched, never sparse
+- Alternatives: `truncate` (sparse, instant); `madvise`/`mlock` only.
+- Reason: measured ~200 us producer stalls on the first write into each 128 KB chunk of a sparse
+  ring file; preallocating removed all of them (0 of 48 boundary crossings vs 22 of 48). Costs a
+  few ms at start-up for a 2 MB ring.
+
 ## Open decisions (to be made at design time)

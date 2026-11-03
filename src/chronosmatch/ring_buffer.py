@@ -62,10 +62,15 @@ class RingBuffer:
         if capacity <= 0 or capacity & (capacity - 1):
             raise ValueError(f"capacity must be a positive power of two, got {capacity}")
         size = config.RING_HEADER_SIZE + capacity * config.ORDER_RECORD_SIZE
+        # Write real zeros instead of truncating to a sparse file, then touch every page, so the
+        # disk blocks and memory pages exist before the first order. With a sparse file, the first
+        # write into each new 128 KB chunk stalled the producer for ~250-300 us (note 14).
         with open(path, "wb") as f:
-            f.truncate(size)
+            f.write(bytes(size))
         file = open(path, "r+b")
         mm = mmap.mmap(file.fileno(), size)
+        for offset in range(0, size, mmap.PAGESIZE):
+            mm[offset] = 0
         _META.pack_into(
             mm,
             config.RING_META_OFFSET,

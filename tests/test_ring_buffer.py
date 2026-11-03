@@ -96,3 +96,11 @@ def test_header_indices_sit_on_separate_cache_lines() -> None:
     lines = {o // config.CACHE_LINE_SIZE for o in offsets}
     assert len(lines) == 3
     assert config.RING_HEADER_SIZE % config.CACHE_LINE_SIZE == 0
+
+
+def test_ring_file_is_fully_allocated_not_sparse(ring_path: Path) -> None:
+    """A sparse file stalled the first write into each new 128 KB chunk (note 14)."""
+    with RingBuffer.create(ring_path, 1 << 12):
+        pass
+    st = ring_path.stat()
+    assert st.st_blocks * 512 >= st.st_size

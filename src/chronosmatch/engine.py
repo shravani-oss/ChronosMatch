@@ -41,6 +41,7 @@ class EngineResult:
     best_ask: int | None
     loop: str = "c"
     loop_pauses: dict | None = None  # C loop only: gaps between loop iterations (process paused)
+    slowest_position: int = 0  # 1-based arrival position of the slowest order (= its id for generated streams)
 
     @property
     def orders_per_sec(self) -> float:
@@ -149,6 +150,7 @@ def run_engine(
         overall = processed * config.NS_PER_SEC // elapsed if elapsed else 0
         _publish(telemetry, book, processed, count, latencies, overall, done=True)
 
+    slowest_position = latencies.index(max(latencies)) + 1 if count else 0
     ordered = sorted(latencies)
     pick = lambda q: ordered[min(count - 1, int(q * count))] / 1_000  # noqa: E731
     return EngineResult(
@@ -163,6 +165,7 @@ def run_engine(
         best_ask=book.best_ask,
         loop=loop,
         loop_pauses=pauses,
+        slowest_position=slowest_position,
     )
 
 

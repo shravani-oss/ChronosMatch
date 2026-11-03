@@ -207,3 +207,12 @@ That is the next thing I measure.
 A: Both must read the same clock. On macOS `time.perf_counter_ns` uses `mach_absolute_time`;
 the C loop calls the same function with the same tick-to-ns formula, and a test checks the C
 value always falls between two Python readings.
+
+**Q: Did you ever find the cause of a specific latency spike?**
+A: Yes. I made the producer record how long each order took from timestamp to publish, and the
+engine record which order was slowest. In 4 of 5 runs they were the same order with the same
+delay. The slow orders were all at positions 4,096k - 5, which map to the first byte of each
+128 KB chunk of the ring file: the file was sparse, so macOS allocated each chunk on first write
+while the producer waited ~200 us. Preallocating the file took those stalls from 22 of 48
+boundary crossings to 0. Two earlier guesses (page faults in general, CPU contention at start-up)
+were tested and rejected first.

@@ -74,3 +74,10 @@ def test_rate_limit_slows_the_stream(ring: RingBuffer) -> None:
 def test_invalid_arguments(ring: RingBuffer, kwargs: dict) -> None:
     with pytest.raises(ValueError):
         asyncio.run(run_firehose(ring, [], **kwargs))
+
+
+def test_publish_delay_statistics(ring: RingBuffer) -> None:
+    stats = asyncio.run(run_firehose(ring, generate_orders(500, seed=4), target_rate=None))
+    assert stats.max_publish_ns > 0
+    assert 1 <= stats.slowest_publish_order_id <= 500
+    assert 0 <= stats.publishes_over_50us <= 500

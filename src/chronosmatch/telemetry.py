@@ -68,7 +68,7 @@ class TelemetryBlock:
     @classmethod
     def create(cls, path: str | Path) -> "TelemetryBlock":
         with open(path, "wb") as f:
-            f.truncate(_SIZE)
+            f.write(bytes(_SIZE))  # real zeros, not a sparse file (see ring_buffer.create)
         file = open(path, "r+b")
         mm = mmap.mmap(file.fileno(), _SIZE)
         _MAGIC.pack_into(mm, _MAGIC_OFFSET, config.TELEMETRY_MAGIC)

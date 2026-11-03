@@ -62,3 +62,11 @@ def test_unknown_loop_rejected(tmp_path: Path) -> None:
     with RingBuffer.create(tmp_path / "x.ring", 8) as ring:
         with pytest.raises(ValueError, match="loop"):
             run_engine(ring, CythonOrderBook(), 0, loop="rust")
+
+
+def test_engine_reports_slowest_order_position(tmp_path: Path) -> None:
+    with RingBuffer.create(tmp_path / "s.ring", 4096) as ring:
+        for o in generate_orders(200, seed=2):
+            ring.try_push(o, time.perf_counter_ns())
+        result = run_engine(ring, CythonOrderBook(), 200)
+    assert 1 <= result.slowest_position <= 200
