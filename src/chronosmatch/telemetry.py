@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from chronosmatch import config
+from chronosmatch.types import Side
 from chronosmatch.atomics import AtomicU64, fence_acquire, fence_release
 
 _SEQ_OFFSET = 0
@@ -25,8 +26,10 @@ _MAGIC_OFFSET = 8
 _PAYLOAD_OFFSET = config.CACHE_LINE_SIZE
 _DEPTH = config.TELEMETRY_DEPTH
 # processed, trades, traded_qty, best_bid, best_ask, updated_ns, rate, p50_ns, p99_ns,
-# target_count, done, then DEPTH x (price, qty) bids, DEPTH x (price, qty) asks.
-_PAYLOAD = struct.Struct("<QQQqqQQQQQQ" + "qq" * (2 * _DEPTH))
+# target_count, done, then DEPTH x (price, qty) bids, DEPTH x (price, qty) asks,
+# then whales: count, last id, last side (0 buy / 1 sell), levels, filled qty, first and last price.
+_PAYLOAD = struct.Struct("<QQQqqQQQQQQ" + "qq" * (2 * _DEPTH) + "QQQQQqq")
+_WHALE_START = 11 + 4 * _DEPTH
 _SIZE = _PAYLOAD_OFFSET + _PAYLOAD.size
 _READ_ATTEMPTS = 1_000
 
@@ -46,6 +49,8 @@ class Snapshot:
     done: bool
     bids: list[tuple[int, int]]   # best first, empty levels omitted
     asks: list[tuple[int, int]]
+    whale_count: int = 0
+    last_whale: tuple | None = None  # (order_id, Side, levels, filled_qty, first_price, last_price)
 
     @property
     def spread(self) -> int | None:
@@ -86,6 +91,11 @@ class TelemetryBlock:
             padded = list(side[:_DEPTH]) + [(0, 0)] * (_DEPTH - min(len(side), _DEPTH))
             for price, qty in padded:
                 levels += [price, qty]
+        if snap.last_whale is None:
+            whale = [snap.whale_count, 0, 0, 0, 0, 0, 0]
+        else:
+            w_id, w_side, w_levels, w_qty, w_first, w_last = snap.last_whale
+            whale = [snap.whale_count, w_id, 0 if w_side is Side.BUY else 1, w_levels, w_qty, w_first, w_last]
         seq = self._seq.load()
         self._seq.store(seq + 1)  # odd: writing
         fence_release()           # the odd value is visible before any payload byte changes
@@ -95,6 +105,7 @@ class TelemetryBlock:
             snap.best_bid or 0, snap.best_ask or 0, snap.updated_ns, snap.orders_per_sec,
             snap.latency_p50_ns, snap.latency_p99_ns, snap.target_count, int(snap.done),
             *levels,
+            *whale,
         )
         self._seq.store(seq + 2)  # even: stable (release: payload visible first)
 
@@ -130,11 +141,15 @@ class TelemetryBlock:
 
 def _to_snapshot(values: tuple) -> Snapshot:
     (processed, trades, qty, bid, ask, updated, rate, p50, p99, target, done) = values[:11]
-    flat = values[11:]
+    flat = values[11:_WHALE_START]
     pairs = [(flat[i], flat[i + 1]) for i in range(0, len(flat), 2)]
+    w_count, w_id, w_side, w_levels, w_qty, w_first, w_last = values[_WHALE_START:]
+    last_whale = None
+    if w_count:
+        last_whale = (w_id, Side.BUY if w_side == 0 else Side.SELL, w_levels, w_qty, w_first, w_last)
     bids = [p for p in pairs[:_DEPTH] if p[1] > 0]
     asks = [p for p in pairs[_DEPTH:] if p[1] > 0]
     return Snapshot(
         processed, trades, qty, bid or None, ask or None, updated, rate, p50, p99, target,
-        bool(done), bids, asks,
+        bool(done), bids, asks, w_count, last_whale,
     )

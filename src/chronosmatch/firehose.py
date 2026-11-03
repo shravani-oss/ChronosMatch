@@ -91,6 +91,7 @@ def main(argv: list[str] | None = None) -> None:
         "--rate", type=int, default=config.TARGET_ORDERS_PER_SEC, help="orders/sec, 0 = unlimited"
     )
     parser.add_argument("--batch", type=int, default=config.FIREHOSE_BATCH_SIZE)
+    parser.add_argument("--whale-every", type=int, default=0, help="inject a whale order every N orders")
     parser.add_argument(
         "--forbid-pickle", action="store_true", help="make any use of pickle raise (proof mode)"
     )
@@ -100,7 +101,8 @@ def main(argv: list[str] | None = None) -> None:
 
     with RingBuffer.attach(args.ring) as ring:
         stats = asyncio.run(
-            run_firehose(ring, generate_orders(args.count, args.seed), args.rate or None, args.batch)
+            run_firehose(ring, generate_orders(args.count, args.seed, whale_every=args.whale_every),
+                         args.rate or None, args.batch)
         )
     print(
         f"sent={stats.sent} elapsed_ms={stats.elapsed_ns / 1e6:.1f} "

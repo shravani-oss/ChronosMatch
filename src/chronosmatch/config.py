@@ -61,3 +61,12 @@ LEDGER_END_OF_STREAM_ID: int = 0          # a trade record with buy_order_id 0 e
 LEDGER_BATCH_SIZE: int = 10_000           # max trades per SQLite transaction
 LEDGER_IDLE_SLEEP_S: float = 0.001        # ledger sleeps (does not spin) when nothing to write
 LEDGER_NICE: int = 15                     # ledger runs at low CPU priority (measured: much better engine tail)
+
+# Whale orders (see docs/notes/16-whales.md).
+# A whale is a large order that clears several levels: it fills at least WHALE_MIN_QTY across at
+# least WHALE_MIN_LEVELS price levels. Levels alone are not enough: near the mid, levels are thin
+# and ~1.8% of ordinary orders (max 100 shares) trade at 3+ levels (note 16).
+WHALE_MIN_LEVELS: int = 3
+WHALE_MIN_QTY: int = 500
+WHALE_DEFAULT_QTY: int = 2_000     # size of injected whale orders in demos
+DASHBOARD_WHALE_FLASH_S: float = 2.0

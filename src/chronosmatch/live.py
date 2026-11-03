@@ -23,6 +23,7 @@ from chronosmatch.telemetry import TelemetryBlock
 
 _SRC_DIR = Path(__file__).resolve().parents[1]
 _DEFAULT_COUNT = 2_000_000
+_DEFAULT_WHALE_EVERY = 20_000
 _HEADLESS_FRAME_S = 1.0
 _STOP_TIMEOUT_S = 10.0
 
@@ -49,6 +50,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--count", type=int, default=_DEFAULT_COUNT)
     parser.add_argument("--rate", type=int, default=config.TARGET_ORDERS_PER_SEC, help="0 = unlimited")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--whale-every", type=int, default=_DEFAULT_WHALE_EVERY,
+                        help="inject a large order every N orders (0 = none)")
     parser.add_argument("--headless", action="store_true")
     args = parser.parse_args(argv)
 
@@ -59,7 +62,8 @@ def main(argv: list[str] | None = None) -> int:
                             ["--ring", str(ring_path), "--count", str(args.count), "--telemetry", str(tel_path)])
             firehose = _start("chronosmatch.firehose",
                               ["--ring", str(ring_path), "--count", str(args.count),
-                               "--seed", str(args.seed), "--rate", str(args.rate)])
+                               "--seed", str(args.seed), "--rate", str(args.rate),
+                               "--whale-every", str(args.whale_every)])
             try:
                 if args.headless:
                     _run_headless(tel, engine)

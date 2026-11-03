@@ -72,6 +72,8 @@ def _publish(
             target_count=count, done=done,
             bids=book.top_levels(Side.BUY, config.TELEMETRY_DEPTH),
             asks=book.top_levels(Side.SELL, config.TELEMETRY_DEPTH),
+            whale_count=book.whale_count,
+            last_whale=book.last_whale,
         )
     )
 

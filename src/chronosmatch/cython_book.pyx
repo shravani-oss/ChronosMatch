@@ -128,6 +128,17 @@ cdef class CythonOrderBook:
     cdef int64_t total_notional   # sum of price x quantity
     cdef uint64_t checksum        # FNV-1a over (buy_id, sell_id, price, qty) of each trade
 
+    # Whales: incoming orders that fill >= whale_min_qty across >= whale_min_levels price levels.
+    cdef int64_t whale_min_levels
+    cdef int64_t whale_min_qty
+    cdef int64_t whales
+    cdef int64_t last_whale_id
+    cdef bint last_whale_is_buy
+    cdef int64_t last_whale_levels
+    cdef int64_t last_whale_qty
+    cdef int64_t last_whale_first_px
+    cdef int64_t last_whale_last_px
+
     def __cinit__(self, max_price=None, capacity=None):
         cdef int64_t i
         cdef int64_t levels
@@ -171,6 +182,10 @@ cdef class CythonOrderBook:
         self.total_traded_qty = 0
         self.total_notional = 0
         self.checksum = FNV_OFFSET
+        self.whale_min_levels = config.WHALE_MIN_LEVELS
+        self.whale_min_qty = config.WHALE_MIN_QTY
+        self.whales = 0
+        self.last_whale_id = 0
 
     def __dealloc__(self):
         free(self.nodes)
@@ -243,6 +258,7 @@ cdef class CythonOrderBook:
         cdef int64_t* level_qty = self.ask_qty if is_buy else self.bid_qty
         cdef int64_t remaining = qty
         cdef int64_t n = 0
+        cdef int64_t levels_hit = 0
         cdef int64_t level, fill
         cdef int32_t node, next_node
 
@@ -250,6 +266,7 @@ cdef class CythonOrderBook:
             level = self.best_ask_px if is_buy else self.best_bid_px
             if (is_buy and level > price) or (not is_buy and level < price):
                 break  # best opposite price no longer crosses (or that side is empty)
+            levels_hit += 1  # each pass of this loop trades at exactly one price level
 
             node = head[level]
             while node != NO_NODE and remaining > 0:
@@ -290,6 +307,15 @@ cdef class CythonOrderBook:
                     while level >= 1 and head[level] == NO_NODE:
                         level -= 1
                     self.best_bid_px = level          # 0 if none left
+
+        if levels_hit >= self.whale_min_levels and qty - remaining >= self.whale_min_qty:
+            self.whales += 1
+            self.last_whale_id = order_id
+            self.last_whale_is_buy = is_buy
+            self.last_whale_levels = levels_hit
+            self.last_whale_qty = qty - remaining
+            self.last_whale_first_px = self.trades[0].price
+            self.last_whale_last_px = self.trades[n - 1].price
 
         if remaining > 0:
             self._rest(is_buy, order_id, price, remaining)
@@ -530,6 +556,20 @@ cdef class CythonOrderBook:
     def trade_stats(self):
         """(total_trades, total_traded_qty, total_notional, checksum) since construction."""
         return (self.total_trades, self.total_traded_qty, self.total_notional, self.checksum)
+
+    @property
+    def whale_count(self):
+        """Orders so far that filled >= WHALE_MIN_QTY across >= WHALE_MIN_LEVELS price levels."""
+        return self.whales
+
+    @property
+    def last_whale(self):
+        """(order_id, side, levels, filled_qty, first_price, last_price) or None."""
+        if self.whales == 0:
+            return None
+        return (self.last_whale_id, Side.BUY if self.last_whale_is_buy else Side.SELL,
+                self.last_whale_levels, self.last_whale_qty,
+                self.last_whale_first_px, self.last_whale_last_px)
 
     @property
     def free_nodes(self):
