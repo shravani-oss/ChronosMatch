@@ -71,6 +71,19 @@ cdef struct OrderRecord:
     uint8_t pad[3]
 
 
+# Must match config.TRADE_RECORD_FORMAT "<QQiIQ" (32 bytes).
+cdef struct TradeOut:
+    uint64_t buy_order_id
+    uint64_t sell_order_id
+    int32_t price
+    uint32_t quantity
+    uint64_t matched_ns
+
+
+def trade_record_size():
+    return sizeof(TradeOut)
+
+
 def now_ns():
     """The C loop's clock (exposed so tests can compare it with time.perf_counter_ns)."""
     return cm_now_ns()
@@ -319,6 +332,7 @@ cdef class CythonOrderBook:
         publish=None,
         int64_t publish_check_every=1024,
         int64_t publish_interval_ns=100_000_000,
+        trade_ring=None,
     ):
         """Engine loop in C: pop `count` orders from `ring` (a RingBuffer) and match each one.
 
@@ -333,7 +347,11 @@ cdef class CythonOrderBook:
         `publish_interval_ns`, checked every `publish_check_every` orders; its time is excluded
         from the gap measurement.
 
-        Returns (processed, elapsed_ns, gaps_over_50us, gaps_over_1ms, max_gap_ns).
+        `trade_ring` (optional RingBuffer created with RING_MAGIC_TRADES): every trade is copied
+        into it as a 32-byte record and published with a release store, for the ledger process.
+        If it is full the loop waits (trades are never dropped) and counts `trade_waits`.
+
+        Returns (processed, elapsed_ns, gaps_over_50us, gaps_over_1ms, max_gap_ns, trade_waits).
         """
         if latencies.shape[0] < count:
             raise ValueError("latencies buffer is shorter than count")
@@ -366,6 +384,34 @@ cdef class CythonOrderBook:
         cdef int64_t last_pub_ns = prev
         cdef int64_t last_pub_count = 0
 
+        cdef bint has_trades = trade_ring is not None
+        cdef unsigned char[::1] tmem
+        cdef unsigned char* tbase = NULL
+        cdef uint64_t* t_write_idx = NULL
+        cdef uint64_t* t_read_idx = NULL
+        cdef TradeOut* tslots = NULL
+        cdef uint64_t tcap = 0
+        cdef uint64_t tmask = 0
+        cdef uint64_t t_write = 0
+        cdef uint64_t t_read = 0
+        cdef int64_t trade_waits = 0
+        cdef int64_t n_trades, i
+        cdef bint waited
+        if has_trades:
+            if sizeof(TradeOut) != config.TRADE_RECORD_SIZE:
+                raise RuntimeError("TradeOut layout does not match config.TRADE_RECORD_SIZE")
+            if trade_ring.capacity & (trade_ring.capacity - 1):
+                raise ValueError("trade ring capacity must be a power of two")
+            tmem = trade_ring.buffer
+            tbase = &tmem[0]
+            t_write_idx = <uint64_t*> (tbase + <Py_ssize_t> config.RING_WRITE_INDEX_OFFSET)
+            t_read_idx = <uint64_t*> (tbase + <Py_ssize_t> config.RING_READ_INDEX_OFFSET)
+            tslots = <TradeOut*> (tbase + <Py_ssize_t> config.RING_HEADER_SIZE)
+            tcap = trade_ring.capacity
+            tmask = tcap - 1
+            t_write = cm_load_acquire_u64(t_write_idx)
+            t_read = cm_load_acquire_u64(t_read_idx)
+
         while processed < count:
             now = cm_now_ns()
             gap = now - prev
@@ -396,10 +442,32 @@ cdef class CythonOrderBook:
             if processed == 0:
                 start = cm_now_ns()
 
-            self._match(rec.side == side_buy, <int64_t> rec.order_id, rec.price, rec.quantity)
+            n_trades = self._match(rec.side == side_buy, <int64_t> rec.order_id, rec.price, rec.quantity)
             now = cm_now_ns()
             latencies[processed] = now - <int64_t> rec.timestamp_ns
             processed += 1
+
+            if has_trades and n_trades > 0:
+                waited = False
+                for i in range(n_trades):
+                    while t_write - t_read >= tcap:            # trade ring full: ledger is behind
+                        t_read = cm_load_acquire_u64(t_read_idx)
+                        if t_write - t_read >= tcap:
+                            if not waited:
+                                cm_store_release_u64(t_write_idx, t_write)  # let it drain what we have
+                                waited = True
+                                trade_waits += 1
+                            if cm_now_ns() > deadline:
+                                raise TimeoutError("trade ring full: the ledger is not draining it")
+                    tslots[t_write & tmask].buy_order_id = <uint64_t> self.trades[i].buy_order_id
+                    tslots[t_write & tmask].sell_order_id = <uint64_t> self.trades[i].sell_order_id
+                    tslots[t_write & tmask].price = <int32_t> self.trades[i].price
+                    tslots[t_write & tmask].quantity = <uint32_t> self.trades[i].quantity
+                    tslots[t_write & tmask].matched_ns = <uint64_t> now
+                    t_write += 1
+                cm_store_release_u64(t_write_idx, t_write)  # release: trade bytes visible first
+                if waited:
+                    prev = cm_now_ns()                      # waiting for the ledger is not an OS pause
 
             if publish is not None and processed % publish_check_every == 0:
                 if now - last_pub_ns >= publish_interval_ns:
@@ -408,7 +476,7 @@ cdef class CythonOrderBook:
                     last_pub_ns = cm_now_ns()
                     prev = last_pub_ns                 # do not count our own publish as a pause
 
-        return (processed, cm_now_ns() - start, gaps_50us, gaps_1ms, max_gap)
+        return (processed, cm_now_ns() - start, gaps_50us, gaps_1ms, max_gap, trade_waits)
 
     def submit_raw(self, bint is_buy, int64_t order_id, int64_t price, int64_t quantity):
         """Same as submit, but takes C integers and returns only the trade count.

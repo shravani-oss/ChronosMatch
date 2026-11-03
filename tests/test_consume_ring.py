@@ -101,5 +101,5 @@ def test_publish_callback_is_called_with_progress(tmp_path: Path) -> None:
 
 def test_pause_statistics_are_sane(tmp_path: Path) -> None:
     with filled_ring(tmp_path / "g.ring", 2_000, seed=3) as ring:
-        _, _, over_50us, over_1ms, max_gap = CythonOrderBook().consume_ring(ring, 2_000, latencies(2_000), 5.0)
-    assert 0 <= over_1ms <= over_50us and max_gap >= 0
+        _, _, over_50us, over_1ms, max_gap, trade_waits = CythonOrderBook().consume_ring(ring, 2_000, latencies(2_000), 5.0)
+    assert 0 <= over_1ms <= over_50us and max_gap >= 0 and trade_waits == 0

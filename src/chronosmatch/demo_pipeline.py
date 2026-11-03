@@ -12,6 +12,7 @@ Proves both mid-review claims in one run:
 """
 
 import argparse
+import contextlib
 import json
 import os
 import subprocess
@@ -43,6 +44,22 @@ class PipelineResult:
     engine_error: str
     expected_stats: tuple[int, int, int, int]
     reference_stats: tuple[int, int, int, int] | None
+    ledger: dict | None = None          # ledger summary when run with a ledger
+    ledger_returncode: int | None = None
+    ledger_error: str = ""
+
+    @property
+    def ledger_ok(self) -> bool:
+        """Every trade the engine made is in SQLite, in order (fingerprints equal)."""
+        if self.ledger_returncode is None:
+            return True  # no ledger in this run
+        return (
+            self.ledger_returncode == 0
+            and self.ledger is not None
+            and self.engine is not None
+            and tuple(self.ledger["fingerprint"]) == tuple(self.engine["trade_stats"])
+            and self.ledger["trades_written"] == self.engine["trade_stats"][0]
+        )
 
     @property
     def ok(self) -> bool:
@@ -53,7 +70,9 @@ class PipelineResult:
         engine_stats = tuple(self.engine["trade_stats"])
         if self.engine["processed"] != self.count or engine_stats != self.expected_stats:
             return False
-        return self.reference_stats is None or self.reference_stats == self.expected_stats
+        if self.reference_stats is not None and self.reference_stats != self.expected_stats:
+            return False
+        return self.ledger_ok
 
 
 def expected_trade_stats(count: int, seed: int) -> tuple[int, int, int, int]:
@@ -80,9 +99,25 @@ def run_pipeline(
     capacity: int,
     with_reference: bool,
     engine_args: tuple[str, ...] = (),
+    ledger_db: Path | None = None,
+    ledger_args: tuple[str, ...] = (),
 ) -> PipelineResult:
+    """With `ledger_db`, a trade ring and a ledger process are added and checked as well."""
     env = {**os.environ, "PYTHONPATH": str(_SRC_DIR)}
-    with RingBuffer.create(ring_path, capacity):
+    trades_path = ring_path.with_suffix(".trades")
+    ledger = None
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(RingBuffer.create(ring_path, capacity))
+        if ledger_db is not None:
+            stack.enter_context(
+                RingBuffer.create(trades_path, config.TRADE_RING_DEFAULT_CAPACITY, config.RING_MAGIC_TRADES)
+            )
+            ledger = subprocess.Popen(
+                [sys.executable, "-m", "chronosmatch.ledger", "--trades", str(trades_path),
+                 "--db", str(ledger_db), "--forbid-pickle", *ledger_args],
+                env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            )
+            engine_args = (*engine_args, "--trades", str(trades_path))
         engine = subprocess.Popen(
             [sys.executable, "-m", "chronosmatch.engine", "--ring", str(ring_path),
              "--count", str(count), "--forbid-pickle", *engine_args],
@@ -99,6 +134,10 @@ def run_pipeline(
 
         fh_out, _ = firehose.communicate(timeout=_TIMEOUT_S)
         eng_out, eng_err = engine.communicate(timeout=_TIMEOUT_S)
+        if ledger is not None:
+            if engine.returncode != 0 and ledger.poll() is None:
+                ledger.terminate()  # no end-of-stream will come
+            led_out, led_err = ledger.communicate(timeout=_TIMEOUT_S)
 
     engine_summary = json.loads(eng_out) if engine.returncode == 0 and eng_out.strip() else None
     return PipelineResult(
@@ -110,6 +149,9 @@ def run_pipeline(
         engine_error=eng_err.strip(),
         expected_stats=expected,
         reference_stats=reference,
+        ledger=json.loads(led_out) if ledger is not None and ledger.returncode == 0 and led_out.strip() else None,
+        ledger_returncode=ledger.returncode if ledger is not None else None,
+        ledger_error=led_err.strip() if ledger is not None else "",
     )
 
 
@@ -120,11 +162,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rate", type=int, default=0, help="orders/sec, 0 = unlimited")
     parser.add_argument("--capacity", type=int, default=config.RING_DEFAULT_CAPACITY)
     parser.add_argument("--reference", action="store_true", help="also verify with the slow reference book")
+    parser.add_argument("--ledger", metavar="DB", help="also run the SQLite ledger, writing trades to DB")
     args = parser.parse_args(argv)
     forbid_pickle()
 
     with tempfile.TemporaryDirectory() as tmp:
-        r = run_pipeline(Path(tmp) / "pipe.ring", args.count, args.seed, args.rate, args.capacity, args.reference)
+        db = Path(args.ledger).resolve() if args.ledger else None
+        if db is not None and db.exists():
+            db.unlink()  # a fresh ledger per run, so its fingerprint covers exactly this run
+        r = run_pipeline(Path(tmp) / "pipe.ring", args.count, args.seed, args.rate, args.capacity,
+                         args.reference, ledger_db=db)
 
     print("ChronosMatch pipeline: firehose process -> mmap ring -> Cython engine process")
     print(f"  firehose  : {r.firehose_output}")
@@ -151,7 +198,17 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  trades    : expected  {r.expected_stats}")
     if r.reference_stats is not None:
         print(f"  trades    : reference {r.reference_stats}")
-    print("  pickle    : disabled in firehose, engine and this process")
+    if r.ledger_returncode is not None:
+        if r.ledger is None:
+            print(f"  ledger    : FAILED (exit {r.ledger_returncode}) {r.ledger_error}")
+        else:
+            lg = r.ledger
+            rate = lg["trades_written"] / (lg["elapsed_ns"] / 1e9) if lg["elapsed_ns"] else 0
+            print(f"  ledger    : {lg['trades_written']:,} trades in SQLite ({rate:,.0f}/s, "
+                  f"{lg['batches']} transactions, largest {lg['largest_batch']:,}), "
+                  f"engine waited for it {r.engine.get('trade_ring_waits')} times")
+            print(f"  trades    : ledger    {tuple(lg['fingerprint'])}  (read back from SQLite)")
+    print("  pickle    : disabled in every process")
     print(f"  RESULT    : {'PASS' if r.ok else 'FAIL'}")
     return 0 if r.ok else 1
 

@@ -12,6 +12,7 @@ summary after the run, not the order data path.
 import argparse
 import gc
 import json
+import struct
 import sys
 import time
 from array import array
@@ -42,6 +43,7 @@ class EngineResult:
     loop: str = "c"
     loop_pauses: dict | None = None  # C loop only: gaps between loop iterations (process paused)
     slowest_position: int = 0  # 1-based arrival position of the slowest order (= its id for generated streams)
+    trade_ring_waits: int | None = None  # times the engine waited for the ledger (None: no ledger)
 
     @property
     def orders_per_sec(self) -> float:
@@ -72,6 +74,19 @@ def _publish(
             asks=book.top_levels(Side.SELL, config.TELEMETRY_DEPTH),
         )
     )
+
+
+_TRADE_STRUCT = struct.Struct(config.TRADE_RECORD_FORMAT)
+
+
+def end_trades(trade_ring: RingBuffer, timeout_s: float = _TIMEOUT_S) -> None:
+    """Tell the ledger there are no more trades: a record with buy_order_id 0."""
+    end = (config.LEDGER_END_OF_STREAM_ID, 0, 0, 0, time.perf_counter_ns())
+    deadline = time.monotonic() + timeout_s
+    while not trade_ring.try_push_raw(_TRADE_STRUCT, end):
+        if time.monotonic() > deadline:
+            raise TimeoutError("trade ring full: could not send end of stream")
+        time.sleep(config.LEDGER_IDLE_SLEEP_S)
 
 
 def _python_loop(
@@ -120,6 +135,7 @@ def run_engine(
     timeout_s: float = _TIMEOUT_S,
     telemetry: TelemetryBlock | None = None,
     loop: str = "c",
+    trade_ring: RingBuffer | None = None,
 ) -> EngineResult:
     """Pop and match exactly `count` orders; raise TimeoutError if they stop arriving.
 
@@ -129,6 +145,8 @@ def run_engine(
     """
     if loop not in ("c", "python"):
         raise ValueError(f"loop must be 'c' or 'python', got {loop!r}")
+    if trade_ring is not None and loop != "c":
+        raise ValueError("a trade ring (ledger) needs the C loop")
     latencies = array("q", bytes(8 * count))  # preallocated C int64 array, not a Python list
     publish = None
     if telemetry is not None:
@@ -137,14 +155,17 @@ def run_engine(
 
     pauses: dict | None = None
     if loop == "c":
-        processed, elapsed, over_50us, over_1ms, max_gap = book.consume_ring(
+        processed, elapsed, over_50us, over_1ms, max_gap, trade_waits = book.consume_ring(
             ring, count, latencies, timeout_s, publish,
-            config.TELEMETRY_CHECK_EVERY, config.TELEMETRY_INTERVAL_NS,
+            config.TELEMETRY_CHECK_EVERY, config.TELEMETRY_INTERVAL_NS, trade_ring,
         )
         pauses = {"gaps_over_50us": over_50us, "gaps_over_1ms": over_1ms,
                   "max_gap_us": round(max_gap / 1_000, 3)}
     else:
         processed, elapsed = _python_loop(ring, book, count, latencies, timeout_s, publish)
+
+    if trade_ring is not None:
+        end_trades(trade_ring, timeout_s)
 
     if telemetry is not None:
         overall = processed * config.NS_PER_SEC // elapsed if elapsed else 0
@@ -166,6 +187,7 @@ def run_engine(
         loop=loop,
         loop_pauses=pauses,
         slowest_position=slowest_position,
+        trade_ring_waits=trade_waits if trade_ring is not None else None,
     )
 
 
@@ -183,6 +205,7 @@ def main(argv: list[str] | None = None) -> int:
         "--loop", choices=("c", "python"), default="c",
         help="c = engine loop inside Cython (default); python = the Week 2 Python loop",
     )
+    parser.add_argument("--trades", help="trade ring (RING_MAGIC_TRADES) to feed the ledger process")
     args = parser.parse_args(argv)
     if args.forbid_pickle:
         forbid_pickle()
@@ -191,12 +214,16 @@ def main(argv: list[str] | None = None) -> int:
         gc.disable()  # no automatic cyclic collections; refcounting still frees memory
 
     telemetry = TelemetryBlock.attach(args.telemetry) if args.telemetry else None
+    trade_ring = RingBuffer.attach(args.trades, config.RING_MAGIC_TRADES) if args.trades else None
     try:
         with RingBuffer.attach(args.ring) as ring, GcMonitor() as gc_mon:
-            result = run_engine(ring, CythonOrderBook(), args.count, telemetry=telemetry, loop=args.loop)
+            result = run_engine(ring, CythonOrderBook(), args.count, telemetry=telemetry,
+                                loop=args.loop, trade_ring=trade_ring)
     finally:
         if telemetry is not None:
             telemetry.close()
+        if trade_ring is not None:
+            trade_ring.close()
     print(json.dumps({**asdict(result), "gc_mode": args.gc, "gc": gc_mon.summary()}))
     return 0
 

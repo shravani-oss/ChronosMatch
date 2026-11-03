@@ -50,3 +50,14 @@ TELEMETRY_INTERVAL_NS: int = 100_000_000    # engine publishes at most every 100
 TELEMETRY_CHECK_EVERY: int = 1_024          # orders between "is it time to publish?" checks
 TELEMETRY_LATENCY_SAMPLE: int = 2_048       # most recent latencies used for live p50/p99
 DASHBOARD_REFRESH_S: float = 0.1
+
+# Trade ring + SQLite ledger (see docs/notes/15-trade-ledger.md).
+# Trade record: buy_order_id u64, sell_order_id u64, price i32, quantity u32, matched_ns u64.
+TRADE_RECORD_FORMAT: str = "<QQiIQ"
+TRADE_RECORD_SIZE: int = 32
+RING_MAGIC_TRADES: int = 0x54524843       # b"CHRT" read little-endian
+TRADE_RING_DEFAULT_CAPACITY: int = 1 << 20
+LEDGER_END_OF_STREAM_ID: int = 0          # a trade record with buy_order_id 0 ends the stream
+LEDGER_BATCH_SIZE: int = 10_000           # max trades per SQLite transaction
+LEDGER_IDLE_SLEEP_S: float = 0.001        # ledger sleeps (does not spin) when nothing to write
+LEDGER_NICE: int = 15                     # ledger runs at low CPU priority (measured: much better engine tail)

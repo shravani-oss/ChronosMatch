@@ -36,9 +36,9 @@ _META = struct.Struct("<IIQQ")
 class RingBuffer:
     """Use RingBuffer.create(...) in one process and RingBuffer.attach(...) in the other."""
 
-    def __init__(self, file, mm: mmap.mmap) -> None:
+    def __init__(self, file, mm: mmap.mmap, expected_magic: int = config.RING_MAGIC) -> None:
         magic, version, capacity, slot_size = _META.unpack_from(mm, config.RING_META_OFFSET)
-        if magic != config.RING_MAGIC or version != config.RING_VERSION:
+        if magic != expected_magic or version != config.RING_VERSION:
             mm.close()
             file.close()
             raise ValueError("not a ChronosMatch ring buffer file (bad magic or version)")
@@ -57,8 +57,13 @@ class RingBuffer:
         self._read_index = AtomicU64(mm, config.RING_READ_INDEX_OFFSET)
 
     @classmethod
-    def create(cls, path: str | Path, capacity: int = config.RING_DEFAULT_CAPACITY) -> "RingBuffer":
-        """Create (or overwrite) the ring file, zero-filled, with both indices at 0."""
+    def create(
+        cls, path: str | Path, capacity: int = config.RING_DEFAULT_CAPACITY, magic: int = config.RING_MAGIC
+    ) -> "RingBuffer":
+        """Create (or overwrite) the ring file, zero-filled, with both indices at 0.
+
+        `magic` tells ring kinds apart: config.RING_MAGIC for orders, RING_MAGIC_TRADES for trades.
+        """
         if capacity <= 0 or capacity & (capacity - 1):
             raise ValueError(f"capacity must be a positive power of two, got {capacity}")
         size = config.RING_HEADER_SIZE + capacity * config.ORDER_RECORD_SIZE
@@ -74,19 +79,19 @@ class RingBuffer:
         _META.pack_into(
             mm,
             config.RING_META_OFFSET,
-            config.RING_MAGIC,
+            magic,
             config.RING_VERSION,
             capacity,
             config.ORDER_RECORD_SIZE,
         )
-        return cls(file, mm)
+        return cls(file, mm, magic)
 
     @classmethod
-    def attach(cls, path: str | Path) -> "RingBuffer":
-        """Map an existing ring file created by RingBuffer.create."""
+    def attach(cls, path: str | Path, magic: int = config.RING_MAGIC) -> "RingBuffer":
+        """Map an existing ring file created by RingBuffer.create with the same `magic`."""
         file = open(path, "r+b")
         mm = mmap.mmap(file.fileno(), 0)
-        return cls(file, mm)
+        return cls(file, mm, magic)
 
     @property
     def capacity(self) -> int:
@@ -130,6 +135,30 @@ class RingBuffer:
         item = ORDER_STRUCT.unpack_from(self._mm, self._slot_offset(read))
         self._read_index.store(read + 1)
         return item
+
+    def try_push_raw(self, record: struct.Struct, values: tuple) -> bool:
+        """Producer only. Pack `values` with `record` (must be slot-sized) into the next slot."""
+        if record.size != self._slot_size:
+            raise ValueError(f"record size {record.size} != slot size {self._slot_size}")
+        write = self._write_index.load()
+        if write - self._read_index.load() >= self._capacity:
+            return False
+        record.pack_into(self._mm, self._slot_offset(write), *values)
+        self._write_index.store(write + 1)
+        return True
+
+    def pop_batch(self, record: struct.Struct, max_items: int) -> list[tuple]:
+        """Consumer only. Unpack up to `max_items` waiting records, then free them all with a
+        single release store (cheaper than one per record)."""
+        if record.size != self._slot_size:
+            raise ValueError(f"record size {record.size} != slot size {self._slot_size}")
+        read = self._read_index.load()
+        n = min(self._write_index.load() - read, max_items)
+        if n <= 0:
+            return []
+        items = [record.unpack_from(self._mm, self._slot_offset(read + i)) for i in range(n)]
+        self._read_index.store(read + n)
+        return items
 
     def close(self) -> None:
         # Views into the mmap must be released before the mmap itself can close.

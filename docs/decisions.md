@@ -153,4 +153,17 @@ Each entry: decision, alternatives, reason.
   ring file; preallocating removed all of them (0 of 48 boundary crossings vs 22 of 48). Costs a
   few ms at start-up for a 2 MB ring.
 
+## D28: Ledger fed by a second shared-memory ring, written in batched transactions
+- Alternatives: insert into SQLite inside the engine; a queue/pipe to the ledger; one row per
+  transaction.
+- Reason: keeps SQL and Python objects off the matching path; reuses the proven ring (atomics,
+  preallocation); batching makes SQLite fast enough (~600k trades/s). If the ring fills, the engine
+  waits rather than dropping trades.
+
+## D29: The ledger runs at low CPU priority (`nice 15`) and sleeps when idle
+- Alternatives: normal priority; a busy-polling ledger.
+- Reason: measured, interleaved: at normal priority p99.9 rose from 7.8 us to 423 us; at nice 15
+  p99.9 was 7.1 us and max 35 us, with the engine never waiting. Background work must not
+  compete with the latency-critical processes.
+
 ## Open decisions (to be made at design time)
