@@ -78,7 +78,7 @@ caveats in `docs/notes/`.
 | Pipeline at 100k/s with ledger (nice 15), 300k orders | p50 0.54 us, p99 0.58 us, max 35 us | 15 |
 | SQLite ledger, 1M orders unlimited | 810,698 trades stored at ~603k/s, engine never waited | 15 |
 
-Reproduce: `python benchmarks/bench_ipc.py` (also `bench_serialization`, `bench_firehose`,
+Reproduce everything: `python benchmarks/run_all.py` (or one script, e.g. `python benchmarks/bench_ipc.py`; also `bench_serialization`, `bench_firehose`,
 `bench_reference_book`, `bench_order_books`). Raw results in `benchmarks/results/`.
 
 **Caveats:** the Cython speedup is against our deliberately simple reference book, not an
@@ -112,5 +112,6 @@ learning/           small toy scripts used while learning
 - Weeks 1-2: ring buffer, firehose, Cython order book, pipeline, dashboard (complete).
 - Week 3: engine loop in C with no per-order Python objects; GC ruled out; tail-latency causes
   found and fixed where possible (notes 12-14) (complete).
-- Week 4: SQLite trade ledger (note 15) and whale-order highlighting (note 16) done; final demo
-  rehearsal, project report and slides in progress.
+- Week 4: SQLite trade ledger (note 15) and whale-order highlighting (note 16) (complete).
+- Deliverables: [project report](docs/project-report.md),
+  [presentation outline](docs/presentation-outline.md), [review runbook](docs/mid-review-runbook.md).

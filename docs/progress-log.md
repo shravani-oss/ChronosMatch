@@ -173,6 +173,16 @@
   after measuring: levels alone flagged 17,481 ordinary orders; size + levels gives 0 (note 16).
 - Review check now 7 checks (ledger added): 7/7 PASS. Suite: 245 passing.
 
+## 2026-11-04 to 2026-11-09
+- No commits on these days (mid-review explanation and demo runs only, nothing changed in the repo).
+
+## 2026-11-10
+- Final project report (`docs/project-report.md`) and presentation outline
+  (`docs/presentation-outline.md`).
+- `benchmarks/run_all.py` reruns every benchmark with one command (checked with `--dry-run`; not
+  run today so the recorded results are not replaced by numbers from a heavily loaded machine).
+- README links the deliverables. Suite: 245 passing.
+
 ## Learning debt (must be taught and walked through line by line before the mid review)
 - [ ] Part B check questions (time priority, partial fill, why arrival time matters)
 - [ ] Latency, processes vs threads, the GIL
