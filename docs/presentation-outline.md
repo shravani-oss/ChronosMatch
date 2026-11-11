@@ -62,7 +62,7 @@ Each slide: title, what goes on it, and what to say. Numbers come from `docs/pro
 ### 12. Limitations and future work
 - Learning-grade; OS can still pause processes (no core isolation on macOS)
 - Limit orders and cancels (no market orders); bounded price range; websocket feed deferred
-- Next: Linux with isolated cores, cancellations and market orders, C order generator
+- Next: Linux with isolated cores, market orders, cancels through the ring, C order generator
 - Say: "What I learned most: measure instead of assuming."
 
 ---
