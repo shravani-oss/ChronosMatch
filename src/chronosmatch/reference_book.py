@@ -57,6 +57,15 @@ class ReferenceOrderBook:
             totals[r.price] = totals.get(r.price, 0) + r.remaining
         return sorted(totals.items(), reverse=side is Side.BUY)
 
+    def cancel(self, order_id: int, side: Side, price: int) -> int:
+        """Remove a resting order; return its remaining quantity, or 0 if it is not resting."""
+        resting = self._bids if side is Side.BUY else self._asks
+        for i, r in enumerate(resting):
+            if r.order_id == order_id and r.price == price:
+                del resting[i]
+                return r.remaining
+        return 0
+
     def submit(self, order: Order) -> list[Trade]:
         """Match `order` against the opposite side, rest any remainder, return trades."""
         is_buy = order.side is Side.BUY

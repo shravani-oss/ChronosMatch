@@ -36,7 +36,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python setup.py build_ext --inplace   # compile the Cython modules (rerun after editing .pyx)
-pytest                                # 245 tests
+pytest                                # 269 tests
 ```
 
 ## Demos

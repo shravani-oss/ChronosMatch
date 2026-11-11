@@ -332,6 +332,58 @@ cdef class CythonOrderBook:
             raise OverflowError("order book node pool is full; order rejected")
         return 0
 
+    def cancel(self, int64_t order_id, side, int64_t price):
+        """Remove a resting order; return its remaining quantity, or 0 if it is not resting.
+
+        The caller gives side and price, so only that level's FIFO is walked:
+        O(orders at that price), with no extra id -> node index (no Python objects added).
+        The node goes back to the free pool; if the level empties and it was the best price,
+        the best price is rescanned.
+        """
+        cdef bint is_buy = side is Side.BUY
+        cdef int32_t* head = self.bid_head if is_buy else self.ask_head
+        cdef int32_t* tail = self.bid_tail if is_buy else self.ask_tail
+        cdef int64_t* level_qty = self.bid_qty if is_buy else self.ask_qty
+        cdef int32_t prev = NO_NODE
+        cdef int32_t node
+        cdef int64_t qty
+        cdef int64_t level
+        if price < 1 or price > self.max_price:
+            return 0
+
+        node = head[price]
+        while node != NO_NODE and self.nodes[node].order_id != order_id:
+            prev = node
+            node = self.nodes[node].next
+        if node == NO_NODE:
+            return 0
+
+        if prev == NO_NODE:                    # unlink from the singly linked FIFO
+            head[price] = self.nodes[node].next
+        else:
+            self.nodes[prev].next = self.nodes[node].next
+        if tail[price] == node:
+            tail[price] = prev
+
+        qty = self.nodes[node].remaining
+        level_qty[price] -= qty
+        self.resting_qty -= qty
+        self.resting_orders -= 1
+        self._release_node(node)
+
+        if head[price] == NO_NODE:
+            if is_buy and price == self.best_bid_px:
+                level = price - 1
+                while level >= 1 and self.bid_head[level] == NO_NODE:
+                    level -= 1
+                self.best_bid_px = level       # 0 if no bids left
+            elif not is_buy and price == self.best_ask_px:
+                level = price + 1
+                while level <= self.max_price and self.ask_head[level] == NO_NODE:
+                    level += 1
+                self.best_ask_px = level       # max_price + 1 if no asks left
+        return qty
+
     def submit(self, order):
         """Match a limit order, rest any remainder, and return the trades as Trade objects."""
         self._check_new_order(order.price)

@@ -124,7 +124,7 @@ in 1M, because levels near the mid are thin; adding the size rule gives 0 false 
 
 | Check | Result |
 |---|---|
-| Unit and integration tests | 245 passing |
+| Unit and integration tests | 269 passing |
 | Differential testing: Cython book vs pure-Python reference, 6 order-flow types x 6 seeds x 3,000 orders, compared after every order | 108,000 orders identical |
 | Can the differential tests fail? (deliberate pricing bug planted) | 36 of 36 failed |
 | Proof (a): 1M orders between processes, pickle disabled in both, every order checked | 0 mismatches |
@@ -176,7 +176,8 @@ artefact from running a meter in a thread); both are documented in the notes.
 
 - Learning-grade: real trading systems use C++ or FPGAs and dedicated hardware.
 - Worst-case latency depends on the OS; macOS offers no core isolation or pinning.
-- Bounded price range (1–10,000 ticks); limit orders only (no cancels or market orders).
+- Bounded price range (1–10,000 ticks); limit orders and cancels only (no market orders);
+  cancels work in both books but are not yet sent through the ring (note 17).
 - SQLite runs with `synchronous=NORMAL`, which can lose the last transactions on power loss.
 - The websocket feed mentioned in the original brief was deferred (decision D16).
 - Benchmarks come from one laptop; numbers vary with background load.
@@ -184,7 +185,7 @@ artefact from running a meter in a thread); both are documented in the notes.
 ## 10. Future work
 
 - Run on Linux with isolated cores (`isolcpus`, `taskset`, real-time scheduling) and compare tails.
-- Order cancellation and market orders.
+- Market orders, and a cancel record type in the ring (book-level cancellation added 11 Nov, note 17).
 - Generate orders in C to remove the firehose bottleneck (~800k/s vs the engine's 24.7M/s).
 - A websocket market-data feed as an additional asyncio producer.
 
@@ -199,6 +200,7 @@ artefact from running a meter in a thread); both are documented in the notes.
 | 3 Nov | Sparse-file fix, SQLite ledger, whale detection |
 | 4–9 Nov | No work |
 | 10 Nov | Project report, presentation outline, benchmark runner |
+| 11 Nov | Order cancellation in both books (after the internship period) |
 
 ## 12. Conclusion
 
